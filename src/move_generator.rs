@@ -6,6 +6,7 @@ pub struct Move {
 
     pub is_castle: bool,
     pub capture: Option<PieceType>,
+    pub promotion: Option<PieceType>,
 }
 
 const KNIGHT_ATTACK: [u64; 64] = [
@@ -75,6 +76,55 @@ const KNIGHT_ATTACK: [u64; 64] = [
     9077567998918656,
 ];
 
+// Constructors
+impl Move {
+    pub fn capture(
+        from: u8,
+        to: u8,
+        captured_piece: PieceType,
+        promotion: Option<PieceType>,
+    ) -> Move {
+        Move {
+            capture: Some(captured_piece),
+            is_castle: false,
+            promotion,
+            start_square: from,
+            target_square: to,
+        }
+    }
+
+    pub fn simple(from: u8, to: u8) -> Move {
+        Move {
+            capture: None,
+            is_castle: false,
+            promotion: None,
+            start_square: from,
+            target_square: to,
+        }
+    }
+}
+
+// Move methods
+impl Move {
+    pub fn to_algebraic(&self, piece_type: PieceType) -> &str {
+        fn pos_to_algebraic(pos: u8) -> String {
+            let rank = pos / 8;
+            let file = pos % 8;
+
+            format!("{}{}", (('a' as u8) + rank) as char, file + 1)
+        }
+
+        // if self.capture.is_none() {
+        //     return match self.moving_piece {
+        //         PieceType::Pawn =>
+        //     }
+        // }
+        //
+        ""
+    }
+}
+
+// Move generation
 impl Move {
     pub fn generate_legal_moves(board: &mut Board) -> Vec<Move> {
         let mut moves = Move::generate_possible_moves(board);
@@ -117,6 +167,8 @@ impl Move {
                     is_castle: false,
                     start_square: pos,
                     target_square: target,
+                    moving_piece: PieceType::Knight,
+                    promotion: None,
                 };
 
                 // If there is a piece on the target square, we need to check if it is the same color (reject)
@@ -132,6 +184,11 @@ impl Move {
         }
 
         moves
+    }
+
+    fn pawn_moves(board: &mut Board) -> Vec<Move> {
+        // Moves that involve promotions, should generate a new move for each possible promotion
+        vec![]
     }
 
     fn pop_lsb(board: &mut u64) -> u8 {

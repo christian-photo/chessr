@@ -1,5 +1,6 @@
 use chessr::{
-    board::{Bitboard, Board, Move},
+    board::{Bitboard, Board},
+    move_generator::Move,
     piece::{Piece, PieceType},
 };
 
@@ -7,12 +8,7 @@ use chessr::{
 fn move_switches_player() {
     let mut board = Board::empty();
     board.add_piece(Piece::new(PieceType::Queen, true), 8);
-    let move_desc = Move {
-        start_square: 8,
-        target_square: 16,
-        capture: None,
-        is_castle: false,
-    };
+    let move_desc = Move::simple(8, 16);
     assert!(board.is_white_turn());
     board.make_move(&move_desc);
     assert!(!board.is_white_turn());
@@ -90,15 +86,23 @@ fn move_moves_piece() {
     board.add_piece(Piece::new(PieceType::Queen, true), 0);
     board.add_piece(Piece::new(PieceType::Pawn, false), 16);
 
-    let capture = Move {
-        capture: Some(PieceType::Pawn),
-        is_castle: false,
-        start_square: 0,
-        target_square: 16,
-        white_moves: true,
-    };
+    let capture = Move::capture(0, 16, PieceType::Queen, None);
     board.make_move(&capture);
 
     println!("{}", board.to_ascii());
     assert_eq!(board.piece_at(16).unwrap().piece_type(), PieceType::Queen);
+}
+
+fn pos_to_algebraic(pos: u8) -> String {
+    let rank = pos / 8;
+    let file = pos % 8;
+
+    format!("{}{}", (('a' as u8) + rank) as char, file + 1)
+}
+
+#[test]
+fn pos_conversion() {
+    assert_eq!(pos_to_algebraic(0), "a1");
+    assert_eq!(pos_to_algebraic(63), "h8");
+    assert_eq!(pos_to_algebraic(9), "b2");
 }
