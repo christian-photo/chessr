@@ -1,13 +1,29 @@
 use crate::{board::Board, piece::PieceType};
+use std::mem;
 
 pub struct Move {
     pub start_square: u8,
     pub target_square: u8,
 
     pub is_castle: bool,
+    pub en_passant: bool,
+
+    /// The capture should be populated ON MOVE for performance
     pub capture: Option<PieceType>,
     pub promotion: Option<PieceType>,
 }
+
+#[rustfmt::skip]
+const SQUARES_TO_EDGE: [u8; 64] = [
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 1, 1, 1, 1, 1, 1, 0,
+    0, 1, 2, 2, 2, 2, 1, 0,
+    0, 1, 2, 3, 3, 2, 1, 0,
+    0, 1, 2, 3, 3, 2, 1, 0,
+    0, 1, 2, 2, 2, 2, 1, 0,
+    0, 1, 1, 1, 1, 1, 1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+];
 
 const KNIGHT_ATTACK: [u64; 64] = [
     132096,
@@ -81,12 +97,14 @@ impl Move {
     pub fn capture(
         from: u8,
         to: u8,
+        en_passant: bool,
         captured_piece: PieceType,
         promotion: Option<PieceType>,
     ) -> Move {
         Move {
             capture: Some(captured_piece),
             is_castle: false,
+            en_passant,
             promotion,
             start_square: from,
             target_square: to,
@@ -97,6 +115,7 @@ impl Move {
         Move {
             capture: None,
             is_castle: false,
+            en_passant: false,
             promotion: None,
             start_square: from,
             target_square: to,
@@ -106,55 +125,224 @@ impl Move {
 
 // Move methods
 impl Move {
-    pub fn to_algebraic(&self, piece_type: PieceType) -> &str {
-        fn pos_to_algebraic(pos: u8) -> String {
-            let rank = pos / 8;
-            let file = pos % 8;
+    // pub fn to_algebraic(&self, board: &Board, piece: &Piece) -> String {
+    //     fn pos_to_algebraic(pos: u8) -> String {
+    //         let file = pos % 8;
 
-            format!("{}{}", (('a' as u8) + rank) as char, file + 1)
-        }
+    //         format!("{}{}", rank_char(pos), file + 1)
+    //     }
 
-        // if self.capture.is_none() {
-        //     return match self.moving_piece {
-        //         PieceType::Pawn =>
-        //     }
-        // }
-        //
-        ""
-    }
+    //     fn rank_char(pos: u8) -> char {
+    //         let rank = pos / 8;
+
+    //         (('a' as u8) + rank) as char
+    //     }
+
+    //     if self.capture.is_none() {
+    //         return match piece.piece_type() {
+    //             PieceType::Pawn => pos_to_algebraic(self.target_square),
+    //             PieceType::Knight => format!("N{}", pos_to_algebraic(self.target_square)),
+    //             PieceType::Bishop => format!("B{}", pos_to_algebraic(self.target_square)),
+    //             PieceType::Rook => format!("R{}", pos_to_algebraic(self.target_square)),
+    //             PieceType::Queen => format!("Q{}", pos_to_algebraic(self.target_square)),
+    //             PieceType::King => format!("K{}", pos_to_algebraic(self.target_square)),
+    //         };
+    //     }
+
+    //     ""
+    // }
 }
 
 // Move generation
 impl Move {
     pub fn generate_legal_moves(board: &mut Board) -> Vec<Move> {
-        let mut moves = Move::generate_possible_moves(board);
-        Move::filter_illegal(board, &mut moves);
+        let mut moves = Move::pawn_moves(board);
+        moves.append(&mut Move::knight_moves(board));
+        moves.append(&mut Move::bishop_moves(board));
+        moves.append(&mut Move::rook_moves(board));
+        moves.append(&mut Move::queen_moves(board));
+        moves.append(&mut Move::king_moves(board));
 
         moves
     }
 
-    fn generate_possible_moves(board: &mut Board) -> Vec<Move> {
-        let mut moves = Move::knight_moves(board);
+    pub fn pawn_moves(board: &mut Board) -> Vec<Move> {
+        // Moves that involve promotions, should generate a new move for each possible promotion
+        fn promote_if_possible(
+            board: &Board,
+            pos: u8,
+            target: u8,
+            capture: Option<PieceType>,
+            moves: &mut Vec<Move>,
+        ) -> bool {
+            if board.is_white_turn() && pos / 8 == 6 || !board.is_white_turn() && pos / 8 == 1 {
+                moves.push(Move {
+                    capture,
+                    en_passant: false,
+                    is_castle: false,
+                    promotion: Some(PieceType::Queen),
+                    start_square: pos,
+                    target_square: target,
+                });
+
+                moves.push(Move {
+                    capture,
+                    en_passant: false,
+                    is_castle: false,
+                    promotion: Some(PieceType::Rook),
+                    start_square: pos,
+                    target_square: target,
+                });
+
+                moves.push(Move {
+                    capture,
+                    en_passant: false,
+                    is_castle: false,
+                    promotion: Some(PieceType::Bishop),
+                    start_square: pos,
+                    target_square: target,
+                });
+
+                moves.push(Move {
+                    capture,
+                    en_passant: false,
+                    is_castle: false,
+                    promotion: Some(PieceType::Knight),
+                    start_square: pos,
+                    target_square: target,
+                });
+
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        let mut pawns = board.bitboards[0 + (!board.is_white_turn() as usize) * 6].get_u64();
+        let direction = -1 + (board.is_white_turn() as i8 * 2);
+
+        let mut opponent = board.black.get_u64();
+        let mut friendly = board.white.get_u64();
+
+        if !board.is_white_turn() {
+            mem::swap(&mut opponent, &mut friendly);
+        }
+
+        let mut moves = Vec::<Move>::new();
+
+        while pawns != 0 {
+            let mut pawn_moves = Vec::<Move>::new();
+            let pos = Move::pop_lsb(&mut pawns);
+
+            let piece_infront = (opponent | friendly) & (0b1 << pos as i8 + 8 * direction) != 0;
+
+            let piece_two_infront =
+                (opponent | friendly) & (0b1 << pos as i8 + 16 * direction) != 0;
+
+            let can_capture_left = (opponent & (0b1 << pos as i8 + 8 * direction - 1)) != 0
+                && SQUARES_TO_EDGE[pos as usize] > 0;
+            let can_capture_right = (opponent & (0b1 << pos as i8 + 8 * direction + 1)) != 0
+                && SQUARES_TO_EDGE[pos as usize] > 0;
+
+            if !piece_infront {
+                // Check if the piece will be promoted
+                let target = (pos as i8 + 8 * direction) as u8;
+                if !promote_if_possible(board, pos, target, None, &mut moves) {
+                    pawn_moves.push(Move {
+                        capture: None,
+                        en_passant: false,
+                        is_castle: false,
+                        promotion: None,
+                        start_square: pos,
+                        target_square: target as u8,
+                    });
+                }
+            }
+
+            if can_capture_left {
+                let target = (pos as i8 + 8 * direction - 1) as u8;
+                let capture = board.piece_at(target).unwrap().piece_type(); // We can unwrap because we checked that there is actually a opponent piece. If this still is None, we do not update this array properly
+
+                if !promote_if_possible(board, pos, target as u8, Some(capture), &mut moves) {
+                    pawn_moves.push(Move {
+                        capture: Some(capture),
+                        en_passant: false,
+                        is_castle: false,
+                        promotion: None,
+                        start_square: pos,
+                        target_square: target,
+                    });
+                }
+            }
+
+            if can_capture_right {
+                let target = (pos as i8 + 8 * direction + 1) as u8;
+                let capture = board.piece_at(target).unwrap().piece_type(); // We can unwrap because we checked that there is actually a opponent piece. If this still is None, we do not update this array properly
+
+                if !promote_if_possible(board, pos, target as u8, Some(capture), &mut moves) {
+                    pawn_moves.push(Move {
+                        capture: Some(capture),
+                        en_passant: false,
+                        is_castle: false,
+                        promotion: None,
+                        start_square: pos,
+                        target_square: target,
+                    });
+                }
+            }
+
+            if let Some(en_passant) = board.en_passant {
+                if en_passant == (pos as i8 + 8 * direction + 1) as u8
+                    || en_passant == (pos as i8 + 8 * direction - 1) as u8
+                {
+                    pawn_moves.push(Move {
+                        capture: Some(PieceType::Pawn),
+                        en_passant: true,
+                        is_castle: false,
+                        promotion: None,
+                        start_square: pos,
+                        target_square: en_passant,
+                    });
+                }
+            }
+
+            // These pawns can move two steps, because it is their first move
+            if !piece_infront
+                && !piece_two_infront
+                && (board.is_white_turn() && pos / 8 == 1 || !board.is_white_turn() && pos / 8 == 6)
+            {
+                let move_desc = Move {
+                    capture: None,
+                    en_passant: false,
+                    is_castle: false,
+                    promotion: None,
+                    start_square: pos,
+                    target_square: (pos as i8 + 16 * direction) as u8,
+                };
+
+                pawn_moves.push(move_desc);
+            }
+
+            for move_desc in pawn_moves {
+                if Move::check_move_legal(board, &move_desc) {
+                    moves.push(move_desc);
+                }
+            }
+        }
 
         moves
     }
 
-    /// Filters the following kinds of illegal moves:
-    /// - Moves that leave the king in check
-    fn filter_illegal(board: &mut Board, moves: &mut Vec<Move>) {}
-
-    fn castling(board: &mut Board) -> Vec<Move> {
-        vec![]
-    }
-
-    fn en_passant(board: &mut Board) -> Option<Move> {
-        None
-    }
-
-    fn knight_moves(board: &mut Board) -> Vec<Move> {
+    pub fn knight_moves(board: &mut Board) -> Vec<Move> {
         let mut knights = board.bitboards[1 + (!board.is_white_turn() as usize) * 6].get_u64();
 
         let mut moves = Vec::<Move>::new();
+
+        let friendly = if board.is_white_turn() {
+            board.white.get_u64()
+        } else {
+            board.black.get_u64()
+        };
 
         while knights != 0 {
             let pos = Move::pop_lsb(&mut knights);
@@ -165,30 +353,81 @@ impl Move {
                 let mut found_move = Move {
                     capture: None,
                     is_castle: false,
+                    en_passant: false,
                     start_square: pos,
                     target_square: target,
-                    moving_piece: PieceType::Knight,
                     promotion: None,
                 };
 
-                // If there is a piece on the target square, we need to check if it is the same color (reject)
-                if let Some(target_piece) = board.pieces[target as usize] {
-                    if target_piece.is_white() == board.is_white_turn() {
-                        continue;
-                    } else {
-                        found_move.capture = Some(target_piece.piece_type());
-                    }
+                // Can't capture pieces of the same color
+                if (friendly & (0b1 << target)) != 0 {
+                    continue;
                 }
-                moves.push(found_move);
+
+                found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
+
+                if Move::check_move_legal(board, &found_move) {
+                    moves.push(found_move);
+                }
             }
         }
 
         moves
     }
 
-    fn pawn_moves(board: &mut Board) -> Vec<Move> {
-        // Moves that involve promotions, should generate a new move for each possible promotion
+    pub fn bishop_moves(board: &mut Board) -> Vec<Move> {
         vec![]
+    }
+
+    pub fn rook_moves(board: &mut Board) -> Vec<Move> {
+        vec![]
+    }
+
+    pub fn queen_moves(board: &mut Board) -> Vec<Move> {
+        vec![]
+    }
+
+    pub fn king_moves(board: &mut Board) -> Vec<Move> {
+        vec![]
+    }
+
+    fn check_move_legal(board: &mut Board, move_desc: &Move) -> bool {
+        // To filter moves that would leave the king in check, we only need to look at
+        // sliding pieces (Bishop, Rook, Queen), because pins only occur along rays.
+        // A knight attacks by jumping - it cannot be blocked, so no pin is possible.
+        // A pawn attacks only one square diagonally - it has no ray, so no pin is possible.
+        board.make_move(move_desc);
+
+        let king_pos = board.bitboards[5 + (board.is_white_turn() as usize) * 6]
+            .get_u64()
+            .trailing_zeros() as u8;
+
+        let mut moves = Move::bishop_moves(board);
+        for bishop_move in moves {
+            if bishop_move.target_square == king_pos {
+                board.undo_move(move_desc);
+                return false;
+            }
+        }
+
+        moves = Move::rook_moves(board);
+        for rook_move in moves {
+            if rook_move.target_square == king_pos {
+                board.undo_move(move_desc);
+                return false;
+            }
+        }
+
+        moves = Move::queen_moves(board);
+        for queen_move in moves {
+            if queen_move.target_square == king_pos {
+                board.undo_move(move_desc);
+                return false;
+            }
+        }
+
+        board.undo_move(move_desc);
+        return true;
     }
 
     fn pop_lsb(board: &mut u64) -> u8 {

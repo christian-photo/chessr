@@ -1,7 +1,7 @@
 use std::mem::size_of;
 
 use chessr::piece::Piece;
-use chessr::pregen::generate_knight_attack_map;
+use chessr::pregen::{generate_knight_attack_map, generate_squares_to_edge_map};
 
 macro_rules! show_size {
     (header) => {
@@ -18,7 +18,7 @@ macro_rules! show_size {
 }
 
 fn main() {
-    println!("{:#?}", generate_knight_attack_map());
+    println!("{:#?}", generate_squares_to_edge_map());
     show_size!(header);
     show_size!(i32);
     show_size!(u8);

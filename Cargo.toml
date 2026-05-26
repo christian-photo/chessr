@@ -3,4 +3,11 @@ name = "chessr"
 version = "0.1.0"
 edition = "2024"
 
+[dev-dependencies]
+criterion = { version = "0.8" }
+
+[[bench]]
+name = "benchmark"
+harness = false
+
 [dependencies]

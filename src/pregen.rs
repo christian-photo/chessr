@@ -70,3 +70,18 @@ pub fn generate_knight_attack_map() -> [u64; 64] {
 
     return map;
 }
+
+pub fn generate_squares_to_edge_map() -> [u8; 64] {
+    let mut map = [0u8; 64];
+    let mut coord = BoardCoordinate { x: -1, y: 0 };
+
+    while coord.next_square().is_some() {
+        coord = coord.next_square().unwrap();
+
+        let to_edge = coord.x.min(7 - coord.x).min(coord.y.min(7 - coord.y)) as u8;
+
+        map[coord.to_pos() as usize] = to_edge;
+    }
+
+    return map;
+}

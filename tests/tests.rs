@@ -86,7 +86,7 @@ fn move_moves_piece() {
     board.add_piece(Piece::new(PieceType::Queen, true), 0);
     board.add_piece(Piece::new(PieceType::Pawn, false), 16);
 
-    let capture = Move::capture(0, 16, PieceType::Queen, None);
+    let capture = Move::capture(0, 16, false, PieceType::Queen, None);
     board.make_move(&capture);
 
     println!("{}", board.to_ascii());
@@ -106,3 +106,51 @@ fn pos_conversion() {
     assert_eq!(pos_to_algebraic(63), "h8");
     assert_eq!(pos_to_algebraic(9), "b2");
 }
+
+#[test]
+fn knight_moves() {
+    let starting_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1"; // Notice the removed white pawn
+    let mut starting_board = Board::from_fen(starting_fen).expect("FEN loading failed");
+    let mut target_squares = vec![11u8, 16, 18, 21, 23];
+
+    let moves = Move::knight_moves(&mut starting_board);
+    for move_desc in moves {
+        let index = target_squares
+            .iter()
+            .position(|x| *x == move_desc.target_square)
+            .unwrap();
+        target_squares.remove(index);
+    }
+
+    assert!(
+        target_squares.is_empty(),
+        "Remaining target positions: {:#?}",
+        target_squares
+    );
+}
+
+#[test]
+fn pawn_moves() {
+    let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/2r5/3P4/RNBQKBNR w KQkq - 0 1")
+        .expect("FEN loading failed");
+    let mut target_squares = vec![18u8, 19, 27];
+
+    let moves = Move::pawn_moves(&mut board);
+    for move_desc in moves {
+        let index = target_squares
+            .iter()
+            .position(|x| *x == move_desc.target_square)
+            .unwrap();
+
+        target_squares.remove(index);
+    }
+
+    assert!(
+        target_squares.is_empty(),
+        "Remaining target positions: {:#?}",
+        target_squares
+    );
+}
+
+#[test]
+fn no_pinned_move() {}

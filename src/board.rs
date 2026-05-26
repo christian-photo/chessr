@@ -64,7 +64,7 @@ pub struct Board {
 
     white_turn: bool,
     // castling_rights: ...
-    en_passant: Option<u8>,
+    pub(crate) en_passant: Option<u8>,
     half_moves: u8,
     full_moves: u16,
 }
@@ -208,12 +208,30 @@ impl Board {
     /// Moves a piece to a specified square. Does not check if the move is legal!
     /// It does check beforehand if there is a piece present
     pub fn make_move(&mut self, move_description: &Move) {
+        // TODO: Castling and promotion
         if let Some(piece) = self.piece_at(move_description.start_square) {
             self.white_turn = !self.white_turn;
 
             self.remove_piece(move_description.target_square);
             self.remove_piece(move_description.start_square);
             self.add_piece(piece, move_description.target_square);
+        }
+    }
+
+    pub fn undo_move(&mut self, move_description: &Move) {
+        // TODO: Castling and promotion
+        if let Some(piece) = self.piece_at(move_description.target_square) {
+            self.remove_piece(move_description.target_square);
+            self.add_piece(piece, move_description.start_square);
+
+            if let Some(capture) = move_description.capture {
+                self.add_piece(
+                    Piece::new(capture, self.white_turn),
+                    move_description.target_square,
+                );
+            }
+
+            self.white_turn = !self.white_turn;
         }
     }
 
@@ -228,5 +246,10 @@ impl Board {
 
     pub fn piece_at(&self, pos: u8) -> Option<Piece> {
         self.pieces[pos as usize]
+    }
+
+    pub fn king_checked(&self, white: bool) -> bool {
+        todo!();
+        false
     }
 }
