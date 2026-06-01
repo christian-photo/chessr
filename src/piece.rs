@@ -95,16 +95,7 @@ impl Piece {
         (self.repr() & 0b1 << 7) == 0
     }
 
-    pub fn to_bitboard_index(self: &Piece) -> usize {
-        let index = match self.piece_type() {
-            PieceType::Pawn => 0,
-            PieceType::Knight => 1,
-            PieceType::Bishop => 2,
-            PieceType::Rook => 3,
-            PieceType::Queen => 4,
-            PieceType::King => 5,
-        };
-
-        index + (!self.is_white() as usize) * 6
+    pub fn to_bitboard_index(&self) -> usize {
+        self.repr.trailing_zeros() as usize + (!self.is_white() as usize) * 6
     }
 }

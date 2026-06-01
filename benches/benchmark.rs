@@ -1,6 +1,8 @@
-use chessr::{board::Board, move_generator::Move};
+use chessr::{
+    board::Board,
+    move_generator::{Move, MoveList},
+};
 use criterion::{Criterion, criterion_group, criterion_main};
-use std::hint::black_box;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut board =
@@ -13,11 +15,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     // });
 
     c.bench_function("Knight move generation", |b| {
-        b.iter(|| Move::knight_moves(&mut board))
+        b.iter(|| Move::knight_moves(&mut board, &mut MoveList::new()))
     });
 
     c.bench_function("Pawn move generation", |b| {
-        b.iter(|| Move::pawn_moves(&mut board))
+        b.iter(|| Move::pawn_moves(&mut board, &mut MoveList::new()))
     });
 }
 

@@ -1,7 +1,11 @@
 use std::mem::size_of;
 
+use chessr::move_generator::Move;
 use chessr::piece::Piece;
-use chessr::pregen::{generate_knight_attack_map, generate_squares_to_edge_map};
+use chessr::pregen::{
+    generate_black_pawn_attack_map, generate_black_pawn_move_map, generate_knight_attack_map,
+    generate_squares_to_edge_map, generate_white_pawn_attack_map, generate_white_pawn_move_map,
+};
 
 macro_rules! show_size {
     (header) => {
@@ -18,7 +22,7 @@ macro_rules! show_size {
 }
 
 fn main() {
-    println!("{:#?}", generate_squares_to_edge_map());
+    println!("{:#?}", generate_black_pawn_attack_map());
     show_size!(header);
     show_size!(i32);
     show_size!(u8);
@@ -28,4 +32,5 @@ fn main() {
     show_size!(&[i32]);
     show_size!(Vec<i32>);
     show_size!(Result<(), Box<i32>>);
+    show_size!(Move);
 }

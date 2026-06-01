@@ -1,6 +1,6 @@
 use chessr::{
     board::{Bitboard, Board},
-    move_generator::Move,
+    move_generator::{Move, MoveList},
     piece::{Piece, PieceType},
 };
 
@@ -113,8 +113,10 @@ fn knight_moves() {
     let mut starting_board = Board::from_fen(starting_fen).expect("FEN loading failed");
     let mut target_squares = vec![11u8, 16, 18, 21, 23];
 
-    let moves = Move::knight_moves(&mut starting_board);
-    for move_desc in moves {
+    let mut moves = MoveList::new();
+
+    Move::knight_moves(&mut starting_board, &mut moves);
+    for move_desc in moves.iter() {
         let index = target_squares
             .iter()
             .position(|x| *x == move_desc.target_square)
@@ -127,6 +129,26 @@ fn knight_moves() {
         "Remaining target positions: {:#?}",
         target_squares
     );
+
+    let mut board2 = Board::from_fen("2K5/8/8/2k5/8/8/3N4/8 w - - 0 13").unwrap();
+    let mut target_squares2 = vec![1u8, 5, 17, 21, 26, 28];
+
+    moves.reset();
+
+    Move::knight_moves(&mut board2, &mut moves);
+    for move_desc in moves.iter() {
+        let index = target_squares2
+            .iter()
+            .position(|x| *x == move_desc.target_square)
+            .unwrap();
+        target_squares2.remove(index);
+    }
+
+    assert!(
+        target_squares2.is_empty(),
+        "Remaining target positions: {:#?}",
+        target_squares2
+    );
 }
 
 #[test]
@@ -135,8 +157,10 @@ fn pawn_moves() {
         .expect("FEN loading failed");
     let mut target_squares = vec![18u8, 19, 27];
 
-    let moves = Move::pawn_moves(&mut board);
-    for move_desc in moves {
+    let mut moves = MoveList::new();
+
+    Move::pawn_moves(&mut board, &mut moves);
+    for move_desc in moves.iter() {
         let index = target_squares
             .iter()
             .position(|x| *x == move_desc.target_square)
@@ -154,3 +178,27 @@ fn pawn_moves() {
 
 #[test]
 fn no_pinned_move() {}
+
+#[test]
+fn test_disambiguation() {
+    let mut board = Board::from_fen("1RK3b1/RP3P2/P7/2k5/8/6N1/3N4/8 w - - 0 13").unwrap();
+
+    let algebraic_moves = vec![
+        "Nb1", "Nb3", "Nc4", "Nde4", "Nf3", "Ndf1", // Knight d-file
+        "Nh1", "Ngf1", "Ne2", "Nge4", "Nf5", "Nh5",  // Knight g-file
+        "Raa8", // Rook a-file
+        "Rba8", // Rook b-file
+        "Kd8",  // King
+        "f8=Q", "f8=R", "f8=B", "f8=N", "fxg8=Q", "fxg8=R", "fxg8=B", "fxg8=N", // Pawn f-file
+    ];
+
+    let moves = Move::generate_legal_moves(&mut board);
+    for move_desc in moves.iter() {
+        let algebraic =
+            move_desc.to_algebraic(&board, &board.piece_at(move_desc.start_square).unwrap());
+
+        if !algebraic_moves.contains(&algebraic.as_str()) {
+            panic!("Move {} was not found in premade table", algebraic);
+        }
+    }
+}

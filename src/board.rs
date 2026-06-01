@@ -40,8 +40,9 @@ impl Bitboard {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct Board {
-    /// Piece and color specific bitboards, which should be used for move generation
+    /// Piece and color specific bitboards, which should be used for move generation. The last two are white and black pieces
     /// - WPawn
     /// - WKnight
     /// - WBishop
@@ -51,13 +52,7 @@ pub struct Board {
     /// - BPawn
     /// - BKnight
     /// - ...
-    pub(crate) bitboards: [Bitboard; 12],
-
-    /// Bitboard representing all white pieces on the board
-    pub(crate) white: Bitboard,
-
-    /// Bitboard representing all black pieces on the board
-    pub(crate) black: Bitboard,
+    pub(crate) bitboards: [Bitboard; 14],
 
     /// Array containing all pieces on the board
     pub(crate) pieces: [Option<Piece>; 64],
@@ -72,19 +67,13 @@ pub struct Board {
 impl Board {
     pub fn empty() -> Board {
         Board {
-            bitboards: [Bitboard::empty(); 12],
-            white: Bitboard::empty(),
-            black: Bitboard::empty(),
+            bitboards: [Bitboard::empty(); 14],
             pieces: [None; 64],
             white_turn: true,
             en_passant: None,
             half_moves: 0,
             full_moves: 0,
         }
-    }
-
-    pub fn get_bitboards(&self) -> [Bitboard; 12] {
-        self.bitboards
     }
 
     pub fn from_fen(fen: &str) -> Result<Board, String> {
@@ -185,11 +174,7 @@ impl Board {
         self.bitboards[index].add_piece(pos);
 
         // Update color specific bitboard
-        if piece.is_white() {
-            self.white.add_piece(pos);
-        } else {
-            self.black.add_piece(pos);
-        }
+        self.bitboards[12 + !piece.is_white() as usize].add_piece(pos);
     }
 
     pub fn remove_piece(&mut self, pos: u8) {
@@ -197,6 +182,8 @@ impl Board {
             self.pieces[pos as usize] = None;
             let index = piece.to_bitboard_index();
             self.bitboards[index].remove_piece(pos);
+
+            self.bitboards[12 + !piece.is_white() as usize].remove_piece(pos);
         } else {
             debug_assert!(
                 self.pieces[pos as usize].is_none(),
