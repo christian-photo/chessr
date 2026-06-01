@@ -3,6 +3,68 @@ pub use crate::{
     piece::{Piece, PieceType},
 };
 
+#[derive(Debug, Clone, Copy)]
+pub struct CastlingRights {
+    /// Meaning of individual bits:
+    /// - 1st bit indicates white kingside
+    /// - 2nd bit indicates white queenside
+    /// - 3rd bit indicates black kingside
+    /// - 4th bit indicates black queenside
+    rights: u8,
+}
+
+impl CastlingRights {
+    #[inline(always)]
+    pub fn king_side(&self, white: bool) -> bool {
+        (self.rights & (0b1 << (2 * !white as u8))) != 0
+    }
+
+    #[inline(always)]
+    pub fn queen_side(&self, white: bool) -> bool {
+        (self.rights & (0b01 << (2 * !white as u8))) != 0
+    }
+
+    #[inline(always)]
+    pub fn lose_king_side(&mut self, white: bool) {
+        self.rights &= !(0b1 << (2 * !white as u8));
+    }
+
+    #[inline(always)]
+    pub fn lose_queen_side(&mut self, white: bool) {
+        self.rights &= !(0b01 << (2 * !white as u8));
+    }
+
+    #[inline(always)]
+    pub fn lose(&mut self, king_side: bool, white: bool) {
+        self.rights &= !(0b1 << (2 * !white as u8 + !king_side as u8))
+    }
+
+    #[inline(always)]
+    pub fn gain_king_side(&mut self, white: bool) {
+        self.rights |= 0b1 << (2 * !white as u8);
+    }
+
+    #[inline(always)]
+    pub fn gain_queen_side(&mut self, white: bool) {
+        self.rights |= 0b01 << (2 * !white as u8);
+    }
+
+    #[inline(always)]
+    pub fn gain(&mut self, king_side: bool, white: bool) {
+        self.rights |= 0b1 << (2 * !white as u8 + !king_side as u8)
+    }
+
+    pub fn none() -> Self {
+        Self { rights: 0 }
+    }
+}
+
+impl Default for CastlingRights {
+    fn default() -> Self {
+        Self { rights: 0b1111 }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Bitboard {
     board: u64,
@@ -43,7 +105,7 @@ impl Bitboard {
 #[derive(Debug, Copy, Clone)]
 pub struct Board {
     /// Piece and color specific bitboards, which should be used for move generation. The last two are white and black pieces
-    /// - WPawn
+    /// - WPawn (index 0)
     /// - WKnight
     /// - WBishop
     /// - WRook
@@ -52,16 +114,23 @@ pub struct Board {
     /// - BPawn
     /// - BKnight
     /// - ...
-    pub(crate) bitboards: [Bitboard; 14],
+    /// - White pieces (index 12)
+    /// - Black pieces (index 13)
+    pub bitboards: [Bitboard; 14],
 
     /// Array containing all pieces on the board
-    pub(crate) pieces: [Option<Piece>; 64],
+    pub pieces: [Option<Piece>; 64],
 
     white_turn: bool,
-    // castling_rights: ...
-    pub(crate) en_passant: Option<u8>,
-    half_moves: u8,
-    full_moves: u16,
+
+    /// Holds the castling rights for both white and black, works with a single byte internally
+    pub castling_rights: CastlingRights,
+
+    /// If en passant is possible, this is Some with the square behind the pawn as its value
+    pub en_passant: Option<u8>,
+    // More than likely irrelevant for our purposes
+    // half_moves: u8,
+    // full_moves: u16,
 }
 
 impl Board {
@@ -70,9 +139,8 @@ impl Board {
             bitboards: [Bitboard::empty(); 14],
             pieces: [None; 64],
             white_turn: true,
+            castling_rights: CastlingRights::none(),
             en_passant: None,
-            half_moves: 0,
-            full_moves: 0,
         }
     }
 
@@ -112,7 +180,15 @@ impl Board {
         board.white_turn = iter.next().expect("Malformed FEN string") == "w";
 
         let castling_rights = iter.next().expect("Malformed FEN string");
-        // TODO
+        for c in castling_rights.chars() {
+            if c == '-' {
+                break;
+            }
+
+            let white = c.is_ascii_uppercase();
+            let king_side = c.to_ascii_lowercase() == 'k';
+            board.castling_rights.gain(king_side, white);
+        }
 
         let en_passant_target = iter.next().expect("Malformed FEN string");
         if en_passant_target != "-" {

@@ -48,6 +48,10 @@ fn fen_reader() {
     let starting_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     let starting_board = Board::from_fen(starting_fen).expect("FEN loading failed");
     assert!(starting_board.is_white_turn());
+    assert!(starting_board.castling_rights.king_side(true));
+    assert!(starting_board.castling_rights.king_side(false));
+    assert!(starting_board.castling_rights.queen_side(true));
+    assert!(starting_board.castling_rights.queen_side(false));
 
     let rook = starting_board
         .piece_at(63)
