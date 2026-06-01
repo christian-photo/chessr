@@ -243,6 +243,7 @@ impl Move {
                     start_square: pos,
                     target_square: target,
                 };
+                // We only need to check legality for one move/promotion because the promoted piece type can not influence legality and the move is otherwise the same
                 if !queen_prom.is_legal(board) {
                     return false;
                 }
@@ -287,8 +288,8 @@ impl Move {
         let black_pieces = board.bitboards[13].get_u64();
         let pieces = black_pieces | white_pieces;
 
-        let mut captureable_squares = 0u64;
-        let mut attack_map = &WHITE_PAWN_ATTACK;
+        let mut captureable_squares: u64;
+        let attack_map: &[u64; 64];
 
         if !board.is_white_turn() {
             captureable_squares = white_pieces;
@@ -375,7 +376,7 @@ impl Move {
         }
 
         if let Some(en_passant) = board.en_passant {
-            captureable_squares = captureable_squares | (0b1 << en_passant); // We can just act like the en passant field holds another piece (pawn)
+            captureable_squares |= 0b1 << en_passant; // We can just act like the en passant field holds another piece (pawn)
         }
 
         while pawns != 0 {
@@ -407,13 +408,15 @@ impl Move {
     }
 
     pub fn knight_moves(board: &mut Board, move_list: &mut MoveList) {
-        let mut knights = board.bitboards[1 + (!board.is_white_turn() as usize) * 6].get_u64();
+        let side: usize = if board.is_white_turn() { 0 } else { 1 };
 
-        let friendly = board.bitboards[12 + !board.is_white_turn() as usize];
+        let mut knights = board.bitboards[1 + side * 6].get_u64();
+
+        let friendly = board.bitboards[12 + side].get_u64();
 
         while knights != 0 {
             let pos = Move::pop_lsb(&mut knights);
-            let mut attack_map = KNIGHT_ATTACK[pos as usize];
+            let mut attack_map = KNIGHT_ATTACK[pos as usize] & !friendly;
             while attack_map != 0 {
                 let target = Move::pop_lsb(&mut attack_map);
 
@@ -426,11 +429,6 @@ impl Move {
                     promotion: None,
                 };
 
-                // Can't capture pieces of the same color
-                if friendly.has_piece_at(target) {
-                    continue;
-                }
-
                 found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
 
                 move_list.push_if_legal(found_move, board);
@@ -442,11 +440,17 @@ impl Move {
         let mut bishops = board.bitboards[2 + (!board.is_white_turn() as usize) * 6].get_u64();
     }
 
-    pub fn rook_moves(board: &mut Board, move_list: &mut MoveList) {}
+    pub fn rook_moves(board: &mut Board, move_list: &mut MoveList) {
+        let mut rooks = board.bitboards[3 + (!board.is_white_turn() as usize) * 6].get_u64();
+    }
 
-    pub fn queen_moves(board: &mut Board, move_list: &mut MoveList) {}
+    pub fn queen_moves(board: &mut Board, move_list: &mut MoveList) {
+        let mut queens = board.bitboards[4 + (!board.is_white_turn() as usize) * 6].get_u64();
+    }
 
-    pub fn king_moves(board: &mut Board, move_list: &mut MoveList) {}
+    pub fn king_moves(board: &mut Board, move_list: &mut MoveList) {
+        let mut king = board.bitboards[5 + (!board.is_white_turn() as usize) * 6].get_u64();
+    }
 
     fn pop_lsb(board: &mut u64) -> u8 {
         let lsb = board.trailing_zeros() as u8;
