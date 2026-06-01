@@ -1,4 +1,4 @@
-use crate::{
+pub use crate::{
     move_generator::Move,
     piece::{Piece, PieceType},
 };
@@ -115,7 +115,12 @@ impl Board {
         // TODO
 
         let en_passant_target = iter.next().expect("Malformed FEN string");
-        if en_passant_target != "-" {}
+        if en_passant_target != "-" {
+            let square = Board::algebraic_to_u8(en_passant_target);
+            if square < 64 {
+                board.en_passant = Some(square);
+            }
+        }
 
         Ok(board)
     }
@@ -123,17 +128,19 @@ impl Board {
     pub fn algebraic_to_u8(notation: &str) -> u8 {
         let mut chars = notation.chars();
 
-        let rank = chars
-            .next()
-            .expect("Algebraic notation needs 2 chars")
-            .to_ascii_lowercase();
         let file = chars
             .next()
             .expect("Algebraic notation needs 2 chars")
+            .to_ascii_lowercase() as u8
+            - 'a' as u8;
+        let rank = chars
+            .next()
+            .expect("Algebraic notation needs 2 chars")
             .to_digit(10)
-            .unwrap() as u8;
+            .unwrap() as u8
+            - 1;
 
-        file - 1 + 8 * (rank as u8 - 'a' as u8) as u8
+        file + rank * 8
     }
 
     pub fn to_ascii(&self) -> String {
@@ -195,26 +202,53 @@ impl Board {
     /// Moves a piece to a specified square. Does not check if the move is legal!
     /// It does check beforehand if there is a piece present
     pub fn make_move(&mut self, move_description: &Move) {
-        // TODO: Castling and promotion
+        // TODO: Castling
         if let Some(piece) = self.piece_at(move_description.start_square) {
-            self.white_turn = !self.white_turn;
+            if self
+                .en_passant
+                .is_some_and(|sq| sq == move_description.target_square)
+            {
+                self.remove_piece(
+                    move_description.target_square - 8 * (self.white_turn as u8 * 2 - 1),
+                );
+            } else {
+                self.remove_piece(move_description.target_square);
+            }
 
-            self.remove_piece(move_description.target_square);
             self.remove_piece(move_description.start_square);
-            self.add_piece(piece, move_description.target_square);
+
+            if let Some(new_piece) = move_description.promotion {
+                self.add_piece(
+                    Piece::new(new_piece, self.white_turn),
+                    move_description.target_square,
+                );
+            } else {
+                self.add_piece(piece, move_description.target_square);
+            }
+
+            self.white_turn = !self.white_turn;
         }
     }
 
     pub fn undo_move(&mut self, move_description: &Move) {
-        // TODO: Castling and promotion
+        // TODO: Castling
         if let Some(piece) = self.piece_at(move_description.target_square) {
             self.remove_piece(move_description.target_square);
-            self.add_piece(piece, move_description.start_square);
+
+            if move_description.promotion.is_some() {
+                self.add_piece(
+                    Piece::new(PieceType::Pawn, !self.white_turn),
+                    move_description.start_square,
+                );
+            } else {
+                self.add_piece(piece, move_description.start_square);
+            }
 
             if let Some(capture) = move_description.capture {
                 self.add_piece(
                     Piece::new(capture, self.white_turn),
-                    move_description.target_square,
+                    move_description.target_square
+                        - (move_description.en_passant as u8 * 8 * (self.white_turn as u8 * 2 - 1)),
                 );
             }
 

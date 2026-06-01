@@ -3,8 +3,7 @@ use std::mem::size_of;
 use chessr::move_generator::Move;
 use chessr::piece::Piece;
 use chessr::pregen::{
-    generate_black_pawn_attack_map, generate_black_pawn_move_map, generate_knight_attack_map,
-    generate_squares_to_edge_map, generate_white_pawn_attack_map, generate_white_pawn_move_map,
+    generate_black_pawn_attack_map, generate_knight_attack_map, generate_white_pawn_attack_map,
 };
 
 macro_rules! show_size {

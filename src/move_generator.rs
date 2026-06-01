@@ -1,7 +1,6 @@
 use crate::{
-    board::Board,
-    piece::{Piece, PieceType},
-    pregen::{BLACK_PAWN_ATTACK, KNIGHT_ATTACK, SQUARES_TO_EDGE, WHITE_PAWN_ATTACK},
+    board::*,
+    pregen::{BLACK_PAWN_ATTACK, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
 };
 
 pub struct MoveList {
@@ -202,7 +201,12 @@ impl Move {
     }
 
     pub fn is_legal(&self, board: &Board) -> bool {
-        true
+        let is_king = board.bitboards[5 + (!board.is_white_turn() as usize) * 6]
+            .has_piece_at(self.start_square);
+
+        if !is_king {}
+
+        return true;
     }
 }
 
@@ -381,7 +385,9 @@ impl Move {
 
             while capture_targets != 0 {
                 let target = Move::pop_lsb(&mut capture_targets);
-                let capture = board.piece_at(target).unwrap().piece_type();
+                let capture = board
+                    .piece_at(target)
+                    .map_or(PieceType::Pawn, |p| p.piece_type());
 
                 if !promote_if_possible(board, pos, target, Some(capture), move_list) {
                     move_list.push_if_legal(
@@ -403,7 +409,7 @@ impl Move {
     pub fn knight_moves(board: &mut Board, move_list: &mut MoveList) {
         let mut knights = board.bitboards[1 + (!board.is_white_turn() as usize) * 6].get_u64();
 
-        let friendly = board.bitboards[12 + !board.is_white_turn() as usize].get_u64();
+        let friendly = board.bitboards[12 + !board.is_white_turn() as usize];
 
         while knights != 0 {
             let pos = Move::pop_lsb(&mut knights);
@@ -421,7 +427,7 @@ impl Move {
                 };
 
                 // Can't capture pieces of the same color
-                if (friendly & (0b1 << target)) != 0 {
+                if friendly.has_piece_at(target) {
                     continue;
                 }
 

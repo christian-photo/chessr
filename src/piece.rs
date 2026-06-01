@@ -61,7 +61,7 @@ impl PieceType {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Piece {
     repr: u8,
 }
@@ -97,5 +97,14 @@ impl Piece {
 
     pub fn to_bitboard_index(&self) -> usize {
         self.repr.trailing_zeros() as usize + (!self.is_white() as usize) * 6
+    }
+}
+
+impl std::fmt::Debug for Piece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Piece")
+            .field("is_white", &self.is_white())
+            .field("piece_type", &self.piece_type())
+            .finish()
     }
 }

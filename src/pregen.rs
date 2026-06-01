@@ -115,31 +115,6 @@ pub fn generate_white_pawn_attack_map() -> [u64; 64] {
     return map;
 }
 
-pub fn generate_white_pawn_move_map() -> [u64; 64] {
-    let mut map = [0u64; 64];
-    let mut coord = BoardCoordinate { x: 7, y: 0 };
-
-    while coord.next_square().is_some() {
-        coord = coord.next_square().unwrap();
-        let mut board = Bitboard::empty();
-        let mut targets = vec![coord.offset(0, 1)];
-
-        if coord.y == 1 {
-            targets.push(coord.offset(0, 2));
-        }
-
-        for c in targets {
-            if c.is_some() {
-                board.add_piece(c.unwrap().to_pos());
-            }
-        }
-
-        map[coord.to_pos() as usize] = board.get_u64();
-    }
-
-    map
-}
-
 pub fn generate_black_pawn_attack_map() -> [u64; 64] {
     let mut map = [0u64; 64];
     let mut coord = BoardCoordinate { x: 0, y: 7 };
@@ -167,58 +142,6 @@ pub fn generate_black_pawn_attack_map() -> [u64; 64] {
 
     return map;
 }
-
-pub fn generate_black_pawn_move_map() -> [u64; 64] {
-    let mut map = [0u64; 64];
-    let mut coord = BoardCoordinate { x: 0, y: 7 };
-
-    while coord.prev_square().is_some() {
-        coord = coord.prev_square().unwrap();
-        let mut board = Bitboard::empty();
-        let mut targets = vec![coord.offset(0, -1)];
-
-        if coord.y == 6 {
-            targets.push(coord.offset(0, -2));
-        }
-
-        for c in targets {
-            if c.is_some() {
-                board.add_piece(c.unwrap().to_pos());
-            }
-        }
-
-        map[coord.to_pos() as usize] = board.get_u64();
-    }
-
-    map
-}
-
-pub fn generate_squares_to_edge_map() -> [u8; 64] {
-    let mut map = [0u8; 64];
-    let mut coord = BoardCoordinate { x: -1, y: 0 };
-
-    while coord.next_square().is_some() {
-        coord = coord.next_square().unwrap();
-
-        let to_edge = coord.x.min(7 - coord.x).min(coord.y.min(7 - coord.y)) as u8;
-
-        map[coord.to_pos() as usize] = to_edge;
-    }
-
-    return map;
-}
-
-#[rustfmt::skip]
-pub const SQUARES_TO_EDGE: [u8; 64] = [
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 1, 1, 1, 1, 1, 1, 0,
-    0, 1, 2, 2, 2, 2, 1, 0,
-    0, 1, 2, 3, 3, 2, 1, 0,
-    0, 1, 2, 3, 3, 2, 1, 0,
-    0, 1, 2, 2, 2, 2, 1, 0,
-    0, 1, 1, 1, 1, 1, 1, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-];
 
 pub const BLACK_PAWN_ATTACK: [u64; 64] = [
     0,

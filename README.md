@@ -4,41 +4,12 @@ Because this is a portfolio project, this chess engine was coded without the use
 
 ## Why rust?
 
-## Performance Improvements
-
-To generate the legal moves, you have to make sure, that the piece does not capture pieces of the same color. In my first approach I used the `pieces` array
-in my `Board` struct to check if a piece is present and if it has the same color.
-```rs
-if let Some(target_piece) = board.pieces[target as usize] {
-    if target_piece.is_white() == board.is_white_turn() {
-        continue;
-    } else {
-        found_move.capture = Some(target_piece.piece_type());
-    }
-}
-```
-
-But by moving the capture assignment to the execution of the move and then using the black and white bitboards instead, I was able to reduce the the runtime of the function by 92%!
-```rs
-let friendly = if board.is_white_turn() {
-    board.white.get_u64()
-} else {
-    board.black.get_u64()
-};
-
-if (friendly & (0b1 << target)) != 0 {
-    continue;
-}
-
-found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
-```
-
 ## Project Timeline
 
 - 18.5.2026: Created project and setup board structure
 - 22.5.2026: Finished initial pass on bitboard, pieces and board representation
-- 25.5.2026: Implemented knight moves (9.3ns)
-- 26.5.2026: Implemented first pass on pawn moves (108.4ns)
+- 25.5.2026: Implemented knight moves
+- 26.5.2026: Implemented first pass on pawn moves
 
 ## How it works
 

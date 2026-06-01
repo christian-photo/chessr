@@ -153,9 +153,9 @@ fn knight_moves() {
 
 #[test]
 fn pawn_moves() {
-    let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/2r5/3P4/RNBQKBNR w KQkq - 0 1")
+    let mut board = Board::from_fen("rnbqkbnr/pppp1ppp/8/3Pp3/8/P1r5/3P4/RNBQKBNR w - e6 0 13")
         .expect("FEN loading failed");
-    let mut target_squares = vec![18u8, 19, 27];
+    let mut target_squares = vec![18u8, 19, 24, 27, 43, 44];
 
     let mut moves = MoveList::new();
 
@@ -180,7 +180,7 @@ fn pawn_moves() {
 fn no_pinned_move() {}
 
 #[test]
-fn test_disambiguation() {
+fn algebraic_move_notation() {
     let mut board = Board::from_fen("1RK3b1/RP3P2/P7/2k5/8/6N1/3N4/8 w - - 0 13").unwrap();
 
     let algebraic_moves = vec![
@@ -201,4 +201,31 @@ fn test_disambiguation() {
             panic!("Move {} was not found in premade table", algebraic);
         }
     }
+}
+
+#[test]
+fn undo_promotion() {
+    let mut board = Board::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1").unwrap();
+
+    let promotion = Move {
+        capture: None,
+        en_passant: false,
+        is_castle: false,
+        promotion: Some(PieceType::Queen),
+        start_square: 51,
+        target_square: 59,
+    };
+    board.make_move(&promotion);
+
+    assert_eq!(
+        board.piece_at(59).unwrap(),
+        Piece::new(PieceType::Queen, true)
+    );
+
+    board.undo_move(&promotion);
+
+    assert_eq!(
+        board.piece_at(51).unwrap(),
+        Piece::new(PieceType::Pawn, true)
+    );
 }
