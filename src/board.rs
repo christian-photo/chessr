@@ -1,7 +1,5 @@
-pub use crate::{
-    move_generator::Move,
-    piece::{Piece, PieceType},
-};
+use crate::moves::generator::Move;
+pub use crate::piece::{Piece, PieceType};
 
 #[derive(Debug, Clone, Copy)]
 pub struct CastlingRights {
@@ -198,6 +196,8 @@ impl Board {
             }
         }
 
+        // Half and full moves are intentionally ignored for now
+
         Ok(board)
     }
 
@@ -343,10 +343,5 @@ impl Board {
 
     pub fn piece_at(&self, pos: u8) -> Option<Piece> {
         self.pieces[pos as usize]
-    }
-
-    pub fn king_checked(&self, white: bool) -> bool {
-        todo!();
-        false
     }
 }

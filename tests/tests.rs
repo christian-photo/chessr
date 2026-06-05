@@ -1,6 +1,14 @@
+use std::thread::LocalKey;
+
 use chessr::{
     board::{Bitboard, Board},
-    move_generator::{Move, MoveList},
+    moves::{
+        Move, MoveList,
+        sliding::{
+            SlidingAttackLookup, TOTAL_BISHOP_ATTACKS, TOTAL_ROOK_ATTACKS, bishop_array_length,
+            precompute_attacks, rook_array_length,
+        },
+    },
     piece::{Piece, PieceType},
 };
 
@@ -186,6 +194,7 @@ fn no_pinned_move() {}
 #[test]
 fn algebraic_move_notation() {
     let mut board = Board::from_fen("1RK3b1/RP3P2/P7/2k5/8/6N1/3N4/8 w - - 0 13").unwrap();
+    let lookup = precompute_attacks();
 
     let algebraic_moves = vec![
         "Nb1", "Nb3", "Nc4", "Nde4", "Nf3", "Ndf1", // Knight d-file
@@ -196,10 +205,13 @@ fn algebraic_move_notation() {
         "f8=Q", "f8=R", "f8=B", "f8=N", "fxg8=Q", "fxg8=R", "fxg8=B", "fxg8=N", // Pawn f-file
     ];
 
-    let moves = Move::generate_legal_moves(&mut board);
+    let moves = Move::generate_legal_moves(&mut board, &lookup);
     for move_desc in moves.iter() {
-        let algebraic =
-            move_desc.to_algebraic(&board, &board.piece_at(move_desc.start_square).unwrap());
+        let algebraic = move_desc.to_algebraic(
+            &board,
+            &board.piece_at(move_desc.start_square).unwrap(),
+            &lookup,
+        );
 
         if !algebraic_moves.contains(&algebraic.as_str()) {
             panic!("Move {} was not found in premade table", algebraic);
@@ -232,4 +244,14 @@ fn undo_promotion() {
         board.piece_at(51).unwrap(),
         Piece::new(PieceType::Pawn, true)
     );
+}
+
+#[test]
+fn rook_blocker_configurations() {
+    assert_eq!(rook_array_length(), TOTAL_ROOK_ATTACKS);
+}
+
+#[test]
+fn bishop_blocker_configurations() {
+    assert_eq!(bishop_array_length(), TOTAL_BISHOP_ATTACKS);
 }

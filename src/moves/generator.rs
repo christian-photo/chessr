@@ -1,5 +1,7 @@
 use crate::{
+    bit_ops::pop_lsb,
     board::*,
+    moves::sliding::SlidingAttackLookup,
     pregen::{BLACK_PAWN_ATTACK, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
 };
 
@@ -83,7 +85,12 @@ impl Move {
 impl Move {
     /// Not optimized for performance, but doesn't need to be performant
     /// Because it is (compared to the move generation itself) rarely used
-    pub fn to_algebraic(&self, board: &Board, piece: &Piece) -> String {
+    pub fn to_algebraic(
+        &self,
+        board: &Board,
+        piece: &Piece,
+        lookup: &SlidingAttackLookup,
+    ) -> String {
         fn pos_to_algebraic(pos: u8) -> String {
             let rank = pos / 8;
 
@@ -96,7 +103,13 @@ impl Move {
             (('a' as u8) + file) as char
         }
 
-        fn disambiguation(start: u8, target: u8, board: &Board, piece: &Piece) -> String {
+        fn disambiguation(
+            start: u8,
+            target: u8,
+            board: &Board,
+            piece: &Piece,
+            lookup: &SlidingAttackLookup,
+        ) -> String {
             if piece.piece_type() == PieceType::Pawn || piece.piece_type() == PieceType::King {
                 return "".to_string();
             }
@@ -106,9 +119,9 @@ impl Move {
             match piece.piece_type() {
                 PieceType::Pawn => (),
                 PieceType::Knight => Move::knight_moves(&mut board.clone(), &mut moves),
-                PieceType::Bishop => Move::bishop_moves(&mut board.clone(), &mut moves),
-                PieceType::Rook => Move::rook_moves(&mut board.clone(), &mut moves),
-                PieceType::Queen => Move::queen_moves(&mut board.clone(), &mut moves),
+                PieceType::Bishop => Move::bishop_moves(&mut board.clone(), &mut moves, lookup),
+                PieceType::Rook => Move::rook_moves(&mut board.clone(), &mut moves, lookup),
+                PieceType::Queen => Move::queen_moves(&mut board.clone(), &mut moves, lookup),
                 PieceType::King => (),
             };
 
@@ -169,31 +182,31 @@ impl Move {
             ),
             PieceType::Knight => format!(
                 "N{}{}{}",
-                disambiguation(self.start_square, self.target_square, board, piece),
+                disambiguation(self.start_square, self.target_square, board, piece, lookup),
                 capture,
                 pos_to_algebraic(self.target_square)
             ),
             PieceType::Bishop => format!(
                 "B{}{}{}",
-                disambiguation(self.start_square, self.target_square, board, piece),
+                disambiguation(self.start_square, self.target_square, board, piece, lookup),
                 capture,
                 pos_to_algebraic(self.target_square)
             ),
             PieceType::Rook => format!(
                 "R{}{}{}",
-                disambiguation(self.start_square, self.target_square, board, piece),
+                disambiguation(self.start_square, self.target_square, board, piece, lookup),
                 capture,
                 pos_to_algebraic(self.target_square)
             ),
             PieceType::Queen => format!(
                 "Q{}{}{}",
-                disambiguation(self.start_square, self.target_square, board, piece),
+                disambiguation(self.start_square, self.target_square, board, piece, lookup),
                 capture,
                 pos_to_algebraic(self.target_square)
             ),
             PieceType::King => format!(
                 "K{}{}{}",
-                disambiguation(self.start_square, self.target_square, board, piece),
+                disambiguation(self.start_square, self.target_square, board, piece, lookup),
                 capture,
                 pos_to_algebraic(self.target_square)
             ),
@@ -212,14 +225,14 @@ impl Move {
 
 // Move generation
 impl Move {
-    pub fn generate_legal_moves(board: &mut Board) -> MoveList {
+    pub fn generate_legal_moves(board: &mut Board, lookup: &SlidingAttackLookup) -> MoveList {
         let mut moves = MoveList::new();
 
         Move::pawn_moves(board, &mut moves);
         Move::knight_moves(board, &mut moves);
-        Move::bishop_moves(board, &mut moves);
-        Move::rook_moves(board, &mut moves);
-        Move::queen_moves(board, &mut moves);
+        Move::bishop_moves(board, &mut moves, lookup);
+        Move::rook_moves(board, &mut moves, lookup);
+        Move::queen_moves(board, &mut moves, lookup);
         Move::king_moves(board, &mut moves);
 
         moves
@@ -300,7 +313,7 @@ impl Move {
                 & !pieces; // Double advance is only possible on the first move, so we mask the sixth rank
 
             while single_advance != 0 {
-                let target = Move::pop_lsb(&mut single_advance);
+                let target = pop_lsb(&mut single_advance);
                 let pos = target + 8;
                 if !promote_if_possible(board, pos, target, None, move_list) {
                     move_list.push_if_legal(
@@ -318,7 +331,7 @@ impl Move {
             }
 
             while double_advance != 0 {
-                let target = Move::pop_lsb(&mut double_advance);
+                let target = pop_lsb(&mut double_advance);
                 let pos = target + 16;
                 move_list.push_if_legal(
                     Move {
@@ -341,7 +354,7 @@ impl Move {
                 & !pieces; // Double advance is only possible on the first move, so we mask the third rank
 
             while single_advance != 0 {
-                let target = Move::pop_lsb(&mut single_advance);
+                let target = pop_lsb(&mut single_advance);
                 let pos = target - 8;
                 if !promote_if_possible(board, pos, target, None, move_list) {
                     move_list.push_if_legal(
@@ -359,7 +372,7 @@ impl Move {
             }
 
             while double_advance != 0 {
-                let target = Move::pop_lsb(&mut double_advance);
+                let target = pop_lsb(&mut double_advance);
                 let pos = target - 16;
                 move_list.push_if_legal(
                     Move {
@@ -380,12 +393,12 @@ impl Move {
         }
 
         while pawns != 0 {
-            let pos = Move::pop_lsb(&mut pawns);
+            let pos = pop_lsb(&mut pawns);
 
             let mut capture_targets = attack_map[pos as usize] & captureable_squares;
 
             while capture_targets != 0 {
-                let target = Move::pop_lsb(&mut capture_targets);
+                let target = pop_lsb(&mut capture_targets);
                 let capture = board
                     .piece_at(target)
                     .map_or(PieceType::Pawn, |p| p.piece_type());
@@ -415,10 +428,10 @@ impl Move {
         let friendly = board.bitboards[12 + side].get_u64();
 
         while knights != 0 {
-            let pos = Move::pop_lsb(&mut knights);
+            let pos = pop_lsb(&mut knights);
             let mut attack_map = KNIGHT_ATTACK[pos as usize] & !friendly;
             while attack_map != 0 {
-                let target = Move::pop_lsb(&mut attack_map);
+                let target = pop_lsb(&mut attack_map);
 
                 let mut found_move = Move {
                     capture: None,
@@ -436,25 +449,98 @@ impl Move {
         }
     }
 
-    pub fn bishop_moves(board: &mut Board, move_list: &mut MoveList) {
-        let mut bishops = board.bitboards[2 + (!board.is_white_turn() as usize) * 6].get_u64();
+    pub fn bishop_moves(board: &mut Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
+        let side: usize = if board.is_white_turn() { 0 } else { 1 };
+        let mut bishops = board.bitboards[2 + side * 6].get_u64();
+        let friendly = board.bitboards[12 + side].get_u64();
+
+        let occupancy = board.bitboards[12].get_u64() | board.bitboards[13].get_u64();
+
+        while bishops != 0 {
+            let pos = pop_lsb(&mut bishops);
+            let mut attack_map = lookup.get_bishop_attacks(pos, occupancy) & !friendly;
+            while attack_map != 0 {
+                let target = pop_lsb(&mut attack_map);
+
+                let mut found_move = Move {
+                    capture: None,
+                    is_castle: false,
+                    en_passant: false,
+                    start_square: pos,
+                    target_square: target,
+                    promotion: None,
+                };
+
+                found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
+
+                move_list.push_if_legal(found_move, board);
+            }
+        }
     }
 
-    pub fn rook_moves(board: &mut Board, move_list: &mut MoveList) {
-        let mut rooks = board.bitboards[3 + (!board.is_white_turn() as usize) * 6].get_u64();
+    pub fn rook_moves(board: &mut Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
+        let side: usize = if board.is_white_turn() { 0 } else { 1 };
+        let mut rooks = board.bitboards[3 + side * 6].get_u64();
+        let friendly = board.bitboards[12 + side].get_u64();
+
+        let occupancy = board.bitboards[12].get_u64() | board.bitboards[13].get_u64();
+
+        while rooks != 0 {
+            let pos = pop_lsb(&mut rooks);
+            let mut attack_map = lookup.get_rook_attacks(pos, occupancy) & !friendly;
+            while attack_map != 0 {
+                let target = pop_lsb(&mut attack_map);
+
+                let mut found_move = Move {
+                    capture: None,
+                    is_castle: false,
+                    en_passant: false,
+                    start_square: pos,
+                    target_square: target,
+                    promotion: None,
+                };
+
+                found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
+
+                move_list.push_if_legal(found_move, board);
+            }
+        }
     }
 
-    pub fn queen_moves(board: &mut Board, move_list: &mut MoveList) {
-        let mut queens = board.bitboards[4 + (!board.is_white_turn() as usize) * 6].get_u64();
+    pub fn queen_moves(board: &mut Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
+        let side: usize = if board.is_white_turn() { 0 } else { 1 };
+        let mut queens = board.bitboards[4 + side * 6].get_u64();
+        let friendly = board.bitboards[12 + side].get_u64();
+
+        let occupancy = board.bitboards[12].get_u64() | board.bitboards[13].get_u64();
+
+        while queens != 0 {
+            let pos = pop_lsb(&mut queens);
+            let mut attack_map = lookup.get_queen_attacks(pos, occupancy) & !friendly;
+            while attack_map != 0 {
+                let target = pop_lsb(&mut attack_map);
+
+                let mut found_move = Move {
+                    capture: None,
+                    is_castle: false,
+                    en_passant: false,
+                    start_square: pos,
+                    target_square: target,
+                    promotion: None,
+                };
+
+                found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
+
+                move_list.push_if_legal(found_move, board);
+            }
+        }
     }
 
     pub fn king_moves(board: &mut Board, move_list: &mut MoveList) {
-        let mut king = board.bitboards[5 + (!board.is_white_turn() as usize) * 6].get_u64();
+        // let mut king = board.bitboards[5 + (!board.is_white_turn() as usize) * 6].get_u64();
     }
 
-    fn pop_lsb(board: &mut u64) -> u8 {
-        let lsb = board.trailing_zeros() as u8;
-        *board &= *board - 1;
-        lsb
-    }
+    // fn magic_hash(masked_board: u64, pos: u8) -> u64 {
+    //     (masked_board * MAGICS[pos as usize]) >> MAGIC_SHIFTS[pos as usize]
+    // }
 }

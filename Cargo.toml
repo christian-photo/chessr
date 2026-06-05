@@ -6,8 +6,13 @@ edition = "2024"
 [dev-dependencies]
 criterion = { version = "0.8" }
 
+[features]
+default = ["pext"]
+pext = []
+
 [[bench]]
 name = "benchmark"
 harness = false
 
 [dependencies]
+bitintr = "0.3.0"
