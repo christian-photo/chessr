@@ -2,12 +2,20 @@ use crate::{
     bit_ops::pop_lsb,
     board::*,
     moves::sliding::SlidingAttackLookup,
-    pregen::{BLACK_PAWN_ATTACK, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
+    pregen::{BLACK_PAWN_ATTACK, KING_MOVE_MAP, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MoveFlag {
+    EnPassant,
+    CastleKingside,
+    CastleQueenside,
+}
 
 pub struct MoveList {
     moves: [Move; 218],
     len: usize,
+    pub attacked_squares: [u8; 64],
 }
 
 impl MoveList {
@@ -15,12 +23,14 @@ impl MoveList {
         MoveList {
             moves: [Move::default(); 218],
             len: 0,
+            attacked_squares: [0; 64],
         }
     }
 
     pub fn push(&mut self, m: Move) {
         self.moves[self.len] = m;
         self.len += 1;
+        self.attacked_squares[m.target_square as usize] += 1; // TODO: Each promotion is a seperate move, thereby distorting the result
     }
 
     pub fn push_if_legal(&mut self, m: Move, board: &Board) {
@@ -43,42 +53,10 @@ pub struct Move {
     pub start_square: u8,
     pub target_square: u8,
 
-    pub is_castle: bool,
-    pub en_passant: bool,
+    pub flag: Option<MoveFlag>,
 
     pub capture: Option<PieceType>,
     pub promotion: Option<PieceType>,
-}
-
-// Constructors
-impl Move {
-    pub fn capture(
-        from: u8,
-        to: u8,
-        en_passant: bool,
-        captured_piece: PieceType,
-        promotion: Option<PieceType>,
-    ) -> Move {
-        Move {
-            capture: Some(captured_piece),
-            is_castle: false,
-            en_passant,
-            promotion,
-            start_square: from,
-            target_square: to,
-        }
-    }
-
-    pub fn simple(from: u8, to: u8) -> Move {
-        Move {
-            capture: None,
-            is_castle: false,
-            en_passant: false,
-            promotion: None,
-            start_square: from,
-            target_square: to,
-        }
-    }
 }
 
 // Move methods
@@ -146,7 +124,9 @@ impl Move {
             }
         }
 
-        if self.is_castle {
+        if self.flag.is_some_and(|flag| {
+            flag == MoveFlag::CastleKingside || flag == MoveFlag::CastleQueenside
+        }) {
             if self.target_square == 6 || self.target_square == 62 {
                 return "O-O".to_string();
             } else {
@@ -233,12 +213,14 @@ impl Move {
         Move::bishop_moves(board, &mut moves, lookup);
         Move::rook_moves(board, &mut moves, lookup);
         Move::queen_moves(board, &mut moves, lookup);
-        Move::king_moves(board, &mut moves);
+        Move::king_moves(board, &mut moves, &board.attacked_squares);
+
+        board.attacked_squares = moves.attacked_squares;
 
         moves
     }
 
-    pub fn pawn_moves(board: &mut Board, move_list: &mut MoveList) {
+    pub fn pawn_moves(board: &Board, move_list: &mut MoveList) {
         // Moves that involve promotions, should generate a new move for each possible promotion
         fn promote_if_possible(
             board: &Board,
@@ -250,8 +232,7 @@ impl Move {
             if board.is_white_turn() && target >= 56 || !board.is_white_turn() && target <= 7 {
                 let queen_prom = Move {
                     capture,
-                    en_passant: false,
-                    is_castle: false,
+                    flag: None,
                     promotion: Some(PieceType::Queen),
                     start_square: pos,
                     target_square: target,
@@ -265,8 +246,7 @@ impl Move {
 
                 move_list.push(Move {
                     capture,
-                    en_passant: false,
-                    is_castle: false,
+                    flag: None,
                     promotion: Some(PieceType::Rook),
                     start_square: pos,
                     target_square: target,
@@ -274,8 +254,7 @@ impl Move {
 
                 move_list.push(Move {
                     capture,
-                    en_passant: false,
-                    is_castle: false,
+                    flag: None,
                     promotion: Some(PieceType::Bishop),
                     start_square: pos,
                     target_square: target,
@@ -283,8 +262,7 @@ impl Move {
 
                 move_list.push(Move {
                     capture,
-                    en_passant: false,
-                    is_castle: false,
+                    flag: None,
                     promotion: Some(PieceType::Knight),
                     start_square: pos,
                     target_square: target,
@@ -319,8 +297,7 @@ impl Move {
                     move_list.push_if_legal(
                         Move {
                             capture: None,
-                            en_passant: false,
-                            is_castle: false,
+                            flag: None,
                             promotion: None,
                             start_square: pos,
                             target_square: target,
@@ -336,8 +313,7 @@ impl Move {
                 move_list.push_if_legal(
                     Move {
                         capture: None,
-                        en_passant: false,
-                        is_castle: false,
+                        flag: None,
                         promotion: None,
                         start_square: pos,
                         target_square: target,
@@ -360,8 +336,7 @@ impl Move {
                     move_list.push_if_legal(
                         Move {
                             capture: None,
-                            en_passant: false,
-                            is_castle: false,
+                            flag: None,
                             promotion: None,
                             start_square: pos,
                             target_square: target,
@@ -377,8 +352,7 @@ impl Move {
                 move_list.push_if_legal(
                     Move {
                         capture: None,
-                        en_passant: false,
-                        is_castle: false,
+                        flag: None,
                         promotion: None,
                         start_square: pos,
                         target_square: target,
@@ -407,8 +381,7 @@ impl Move {
                     move_list.push_if_legal(
                         Move {
                             capture: Some(capture),
-                            en_passant: board.en_passant.is_some_and(|square| square == target),
-                            is_castle: false,
+                            flag: board.en_passant.map(|_| MoveFlag::EnPassant),
                             promotion: None,
                             start_square: pos,
                             target_square: target,
@@ -420,7 +393,7 @@ impl Move {
         }
     }
 
-    pub fn knight_moves(board: &mut Board, move_list: &mut MoveList) {
+    pub fn knight_moves(board: &Board, move_list: &mut MoveList) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
 
         let mut knights = board.bitboards[1 + side * 6].get_u64();
@@ -435,8 +408,7 @@ impl Move {
 
                 let mut found_move = Move {
                     capture: None,
-                    is_castle: false,
-                    en_passant: false,
+                    flag: None,
                     start_square: pos,
                     target_square: target,
                     promotion: None,
@@ -449,7 +421,7 @@ impl Move {
         }
     }
 
-    pub fn bishop_moves(board: &mut Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
+    pub fn bishop_moves(board: &Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
         let mut bishops = board.bitboards[2 + side * 6].get_u64();
         let friendly = board.bitboards[12 + side].get_u64();
@@ -464,8 +436,7 @@ impl Move {
 
                 let mut found_move = Move {
                     capture: None,
-                    is_castle: false,
-                    en_passant: false,
+                    flag: None,
                     start_square: pos,
                     target_square: target,
                     promotion: None,
@@ -478,7 +449,7 @@ impl Move {
         }
     }
 
-    pub fn rook_moves(board: &mut Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
+    pub fn rook_moves(board: &Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
         let mut rooks = board.bitboards[3 + side * 6].get_u64();
         let friendly = board.bitboards[12 + side].get_u64();
@@ -493,8 +464,7 @@ impl Move {
 
                 let mut found_move = Move {
                     capture: None,
-                    is_castle: false,
-                    en_passant: false,
+                    flag: None,
                     start_square: pos,
                     target_square: target,
                     promotion: None,
@@ -507,7 +477,7 @@ impl Move {
         }
     }
 
-    pub fn queen_moves(board: &mut Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
+    pub fn queen_moves(board: &Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
         let mut queens = board.bitboards[4 + side * 6].get_u64();
         let friendly = board.bitboards[12 + side].get_u64();
@@ -522,8 +492,7 @@ impl Move {
 
                 let mut found_move = Move {
                     capture: None,
-                    is_castle: false,
-                    en_passant: false,
+                    flag: None,
                     start_square: pos,
                     target_square: target,
                     promotion: None,
@@ -536,8 +505,65 @@ impl Move {
         }
     }
 
-    pub fn king_moves(board: &mut Board, move_list: &mut MoveList) {
-        // let mut king = board.bitboards[5 + (!board.is_white_turn() as usize) * 6].get_u64();
+    pub fn king_moves(board: &Board, move_list: &mut MoveList, attacked_squares: &[u8; 64]) {
+        let side: usize = if board.is_white_turn() { 0 } else { 1 };
+        let mut king = board.bitboards[5 + side * 6].get_u64();
+        let friendly = board.bitboards[12 + side].get_u64();
+
+        let occupancy = board.bitboards[12].get_u64() | board.bitboards[13].get_u64();
+
+        let pos = pop_lsb(&mut king);
+
+        let mut attack_map = KING_MOVE_MAP[pos as usize] & !friendly;
+        while attack_map != 0 {
+            let target = pop_lsb(&mut attack_map);
+
+            let mut found_move = Move {
+                capture: None,
+                flag: None,
+                start_square: pos,
+                target_square: target,
+                promotion: None,
+            };
+
+            found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
+
+            move_list.push_if_legal(found_move, board);
+        }
+
+        let kingside_castle_mask = 0b11 << (5 + 56 * side);
+        let queenside_castle_mask = 0b111 << (1 + 56 * side);
+
+        if board.castling_rights.king_side(board.is_white_turn()) {
+            if attacked_squares[pos as usize] == 0
+                && attacked_squares[pos as usize + 1] == 0
+                && attacked_squares[pos as usize + 2] == 0
+                && occupancy & kingside_castle_mask == 0
+            {
+                move_list.push(Move {
+                    capture: None,
+                    flag: Some(MoveFlag::CastleKingside),
+                    promotion: None,
+                    start_square: pos,
+                    target_square: pos + 2,
+                })
+            }
+        }
+        if board.castling_rights.queen_side(board.is_white_turn()) {
+            if attacked_squares[pos as usize] == 0
+                && attacked_squares[pos as usize - 1] == 0
+                && attacked_squares[pos as usize - 2] == 0
+                && occupancy & queenside_castle_mask == 0
+            {
+                move_list.push(Move {
+                    capture: None,
+                    flag: Some(MoveFlag::CastleQueenside),
+                    promotion: None,
+                    start_square: pos,
+                    target_square: pos - 2,
+                })
+            }
+        }
     }
 
     // fn magic_hash(masked_board: u64, pos: u8) -> u64 {

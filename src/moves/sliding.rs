@@ -1,3 +1,5 @@
+#[cfg(not(feature = "pext"))]
+use crate::moves::magic::Random;
 use crate::{
     bit_ops::pop_lsb,
     pregen::{BISHOP_OCCUPANCY_MASK, ROOK_OCCUPANCY_MASK},
@@ -8,28 +10,61 @@ pub fn precompute_attacks() -> SlidingAttackLookup {
     let mut bishop_offset = 0usize;
     let mut lookup = SlidingAttackLookup::empty();
 
+    #[cfg(not(feature = "pext"))]
+    let mut random = Random::new(230482);
+
     for square in 0..64u8 {
         lookup.rook_offsets[square as usize] = rook_offset;
         lookup.bishop_offsets[square as usize] = bishop_offset;
 
         // Rook attacks --------
         let rook_occupancy_mask = ROOK_OCCUPANCY_MASK[square as usize];
-        let rook_blockers = generate_blockers(rook_occupancy_mask);
 
-        for blocker_config in rook_blockers {
-            let attack =
-                generate_attacks(blocker_config, rook_occupancy_mask, square, [8, 1, -8, -1]);
+        #[cfg(feature = "pext")]
+        {
+            let rook_blockers = generate_blockers(rook_occupancy_mask);
+            for blocker_config in rook_blockers {
+                let attack =
+                    generate_attacks(blocker_config, rook_occupancy_mask, square, [8, 1, -8, -1]);
 
-            #[cfg(feature = "pext")]
-            {
                 use bitintr::Pext;
 
                 let index = blocker_config.pext(rook_occupancy_mask) as usize + rook_offset;
-                lookup.rook_attacks_pext[index] = attack;
+                lookup.rook_attacks[index] = attack;
             }
+        }
 
-            #[cfg(not(feature = "pext"))]
-            {}
+        #[cfg(not(feature = "pext"))]
+        for _ in 0..100_000 {
+            let mut shift = 50u8;
+            'outer: while shift > 30 {
+                let rook_blockers = generate_blockers(rook_occupancy_mask);
+                let magic_candidate = random.random();
+                let mut hashes = vec![0u64; rook_blockers.len()];
+                let mut attacks = vec![0u64; rook_blockers.len()];
+                for blocker_config in rook_blockers {
+                    let attack = generate_attacks(
+                        blocker_config,
+                        rook_occupancy_mask,
+                        square,
+                        [8, 1, -8, -1],
+                    );
+
+                    let hash = (blocker_config * magic_candidate) >> shift;
+
+                    if hashes.contains(&hash) && !attacks.contains(&attack) {
+                        shift -= 1;
+                        continue 'outer; // Hash collision
+                    }
+                    if hashes.contains(&hash) && attacks.contains(&attack) {
+                        continue; // A desired collision
+                    }
+                    hashes.push(hash);
+                    attacks.push(attack);
+                }
+
+                rook_offset += hashes.len();
+            }
         }
 
         rook_offset += 1 << rook_occupancy_mask.count_ones();
@@ -51,7 +86,7 @@ pub fn precompute_attacks() -> SlidingAttackLookup {
                 use bitintr::Pext;
 
                 let index = blocker_config.pext(bishop_occupancy_mask) as usize + bishop_offset;
-                lookup.bishop_attacks_pext[index] = attack;
+                lookup.bishop_attacks[index] = attack;
             }
 
             #[cfg(not(feature = "pext"))]
@@ -152,10 +187,8 @@ pub const TOTAL_ROOK_ATTACKS: usize = 102400;
 pub const TOTAL_BISHOP_ATTACKS: usize = 5248;
 
 pub struct SlidingAttackLookup {
-    #[cfg(feature = "pext")]
-    rook_attacks_pext: Vec<u64>,
-    #[cfg(feature = "pext")]
-    bishop_attacks_pext: Vec<u64>,
+    rook_attacks: Vec<u64>,
+    bishop_attacks: Vec<u64>,
 
     rook_offsets: [usize; 64],
     bishop_offsets: [usize; 64],
@@ -164,8 +197,16 @@ pub struct SlidingAttackLookup {
 impl SlidingAttackLookup {
     pub fn empty() -> Self {
         Self {
-            bishop_attacks_pext: vec![0u64; TOTAL_BISHOP_ATTACKS],
-            rook_attacks_pext: vec![0u64; TOTAL_ROOK_ATTACKS],
+            #[cfg(feature = "pext")]
+            bishop_attacks: vec![0u64; TOTAL_BISHOP_ATTACKS],
+            #[cfg(feature = "pext")]
+            rook_attacks: vec![0u64; TOTAL_ROOK_ATTACKS],
+
+            #[cfg(not(feature = "pext"))]
+            bishop_attacks: vec![0u64; 5248], // Numbers grabbed out of thin air, will need to see how many hash collisions there are
+            #[cfg(not(feature = "pext"))]
+            rook_attacks: vec![0u64; 102400],
+
             rook_offsets: [0usize; 64],
             bishop_offsets: [0usize; 64],
         }
@@ -180,7 +221,7 @@ impl SlidingAttackLookup {
             use bitintr::Pext;
 
             let index = board_occupancy.pext(mask) as usize + square_offset;
-            return self.rook_attacks_pext[index];
+            return self.rook_attacks[index];
         }
 
         #[cfg(not(feature = "pext"))]
@@ -196,7 +237,7 @@ impl SlidingAttackLookup {
             use bitintr::Pext;
 
             let index = board_occupancy.pext(mask) as usize + square_offset;
-            return self.bishop_attacks_pext[index];
+            return self.bishop_attacks[index];
         }
 
         #[cfg(not(feature = "pext"))]

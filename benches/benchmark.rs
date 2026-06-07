@@ -18,23 +18,23 @@ fn move_generation_benchmark(c: &mut Criterion) {
     //
 
     c.bench_function("Knight move generation", |b| {
-        b.iter(|| Move::knight_moves(&mut board, &mut MoveList::new()))
+        b.iter(|| Move::knight_moves(&board, &mut MoveList::new()))
     });
 
     c.bench_function("Pawn move generation", |b| {
-        b.iter(|| Move::pawn_moves(&mut board, &mut MoveList::new()))
+        b.iter(|| Move::pawn_moves(&board, &mut MoveList::new()))
     });
 
     c.bench_function("Bishop move generation", |b| {
-        b.iter(|| Move::bishop_moves(&mut board, &mut MoveList::new(), &lookup))
+        b.iter(|| Move::bishop_moves(&board, &mut MoveList::new(), &lookup))
     });
 
     c.bench_function("Rook move generation", |b| {
-        b.iter(|| Move::rook_moves(&mut board, &mut MoveList::new(), &lookup))
+        b.iter(|| Move::rook_moves(&board, &mut MoveList::new(), &lookup))
     });
 
     c.bench_function("Queen move generation", |b| {
-        b.iter(|| Move::queen_moves(&mut board, &mut MoveList::new(), &lookup))
+        b.iter(|| Move::queen_moves(&board, &mut MoveList::new(), &lookup))
     });
 }
 
@@ -43,8 +43,7 @@ fn move_making_benchmark(c: &mut Criterion) {
 
     let promotion = Move {
         capture: None,
-        en_passant: false,
-        is_castle: false,
+        flag: None,
         promotion: Some(PieceType::Queen),
         start_square: 51,
         target_square: 59,
@@ -52,9 +51,10 @@ fn move_making_benchmark(c: &mut Criterion) {
 
     c.bench_function("Do/Undo move", |b| {
         b.iter(|| {
+            let previous = board.clone();
             board.make_move(&promotion);
 
-            board.undo_move(&promotion);
+            board.restore(previous);
         })
     });
 }

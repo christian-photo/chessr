@@ -1,5 +1,6 @@
 use std::mem::size_of;
 
+use chessr::board::Board;
 use chessr::moves::generator::Move;
 use chessr::piece::Piece;
 
@@ -22,6 +23,7 @@ fn main() {
     show_size!(i32);
     show_size!(u8);
     show_size!(Piece);
+    show_size!(Board);
     show_size!(&i32);
     show_size!(Box<i32>);
     show_size!(&[i32]);

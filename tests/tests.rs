@@ -1,5 +1,3 @@
-use std::thread::LocalKey;
-
 use chessr::{
     board::{Bitboard, Board},
     moves::{
@@ -16,7 +14,13 @@ use chessr::{
 fn move_switches_player() {
     let mut board = Board::empty();
     board.add_piece(Piece::new(PieceType::Queen, true), 8);
-    let move_desc = Move::simple(8, 16);
+    let move_desc = Move {
+        capture: None,
+        flag: None,
+        promotion: None,
+        start_square: 8,
+        target_square: 16,
+    };
     assert!(board.is_white_turn());
     board.make_move(&move_desc);
     assert!(!board.is_white_turn());
@@ -98,7 +102,13 @@ fn move_moves_piece() {
     board.add_piece(Piece::new(PieceType::Queen, true), 0);
     board.add_piece(Piece::new(PieceType::Pawn, false), 16);
 
-    let capture = Move::capture(0, 16, false, PieceType::Queen, None);
+    let capture = Move {
+        capture: Some(PieceType::Queen),
+        flag: None,
+        promotion: None,
+        start_square: 0,
+        target_square: 16,
+    };
     board.make_move(&capture);
 
     println!("{}", board.to_ascii());
@@ -225,12 +235,12 @@ fn undo_promotion() {
 
     let promotion = Move {
         capture: None,
-        en_passant: false,
-        is_castle: false,
+        flag: None,
         promotion: Some(PieceType::Queen),
         start_square: 51,
         target_square: 59,
     };
+    let copy = board.clone();
     board.make_move(&promotion);
 
     assert_eq!(
@@ -238,7 +248,7 @@ fn undo_promotion() {
         Piece::new(PieceType::Queen, true)
     );
 
-    board.undo_move(&promotion);
+    board.restore(copy);
 
     assert_eq!(
         board.piece_at(51).unwrap(),

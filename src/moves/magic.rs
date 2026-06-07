@@ -18,23 +18,7 @@ impl MagicEntry {
     }
 }
 
-// pub fn find_magic_number(pos: u8, rook: bool, random: &mut Random) -> MagicEntry {
-//     let mask = if rook {
-//         ROOK_MOVE_MASK[pos as usize]
-//     } else {
-//         BISHOP_MOVE_MASK[pos as usize]
-//     };
-//     let offset = 1 << mask.count_ones();
-
-//     MagicEntry {
-//         mask,
-//         magic: 0,
-//         shift: 0,
-//         offset,
-//     }
-// }
-
-struct Random(u64);
+pub struct Random(u64);
 
 impl Random {
     pub fn new(seed: u64) -> Self {
