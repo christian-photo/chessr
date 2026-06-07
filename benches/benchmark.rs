@@ -43,7 +43,7 @@ fn move_making_benchmark(c: &mut Criterion) {
 
     let promotion = Move {
         capture: None,
-        flag: None,
+        flag: chessr::moves::generator::MoveFlag::None,
         promotion: Some(PieceType::Queen),
         start_square: 51,
         target_square: 59,

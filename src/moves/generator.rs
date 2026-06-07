@@ -5,8 +5,11 @@ use crate::{
     pregen::{BLACK_PAWN_ATTACK, KING_MOVE_MAP, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
 pub enum MoveFlag {
+    #[default]
+    None = 0,
     EnPassant,
     CastleKingside,
     CastleQueenside,
@@ -53,7 +56,7 @@ pub struct Move {
     pub start_square: u8,
     pub target_square: u8,
 
-    pub flag: Option<MoveFlag>,
+    pub flag: MoveFlag,
 
     pub capture: Option<PieceType>,
     pub promotion: Option<PieceType>,
@@ -124,9 +127,7 @@ impl Move {
             }
         }
 
-        if self.flag.is_some_and(|flag| {
-            flag == MoveFlag::CastleKingside || flag == MoveFlag::CastleQueenside
-        }) {
+        if self.flag == MoveFlag::CastleKingside || self.flag == MoveFlag::CastleQueenside {
             if self.target_square == 6 || self.target_square == 62 {
                 return "O-O".to_string();
             } else {
@@ -232,7 +233,7 @@ impl Move {
             if board.is_white_turn() && target >= 56 || !board.is_white_turn() && target <= 7 {
                 let queen_prom = Move {
                     capture,
-                    flag: None,
+                    flag: MoveFlag::None,
                     promotion: Some(PieceType::Queen),
                     start_square: pos,
                     target_square: target,
@@ -246,7 +247,7 @@ impl Move {
 
                 move_list.push(Move {
                     capture,
-                    flag: None,
+                    flag: MoveFlag::None,
                     promotion: Some(PieceType::Rook),
                     start_square: pos,
                     target_square: target,
@@ -254,7 +255,7 @@ impl Move {
 
                 move_list.push(Move {
                     capture,
-                    flag: None,
+                    flag: MoveFlag::None,
                     promotion: Some(PieceType::Bishop),
                     start_square: pos,
                     target_square: target,
@@ -262,7 +263,7 @@ impl Move {
 
                 move_list.push(Move {
                     capture,
-                    flag: None,
+                    flag: MoveFlag::None,
                     promotion: Some(PieceType::Knight),
                     start_square: pos,
                     target_square: target,
@@ -297,7 +298,7 @@ impl Move {
                     move_list.push_if_legal(
                         Move {
                             capture: None,
-                            flag: None,
+                            flag: MoveFlag::None,
                             promotion: None,
                             start_square: pos,
                             target_square: target,
@@ -313,7 +314,7 @@ impl Move {
                 move_list.push_if_legal(
                     Move {
                         capture: None,
-                        flag: None,
+                        flag: MoveFlag::None,
                         promotion: None,
                         start_square: pos,
                         target_square: target,
@@ -336,7 +337,7 @@ impl Move {
                     move_list.push_if_legal(
                         Move {
                             capture: None,
-                            flag: None,
+                            flag: MoveFlag::None,
                             promotion: None,
                             start_square: pos,
                             target_square: target,
@@ -352,7 +353,7 @@ impl Move {
                 move_list.push_if_legal(
                     Move {
                         capture: None,
-                        flag: None,
+                        flag: MoveFlag::None,
                         promotion: None,
                         start_square: pos,
                         target_square: target,
@@ -381,7 +382,9 @@ impl Move {
                     move_list.push_if_legal(
                         Move {
                             capture: Some(capture),
-                            flag: board.en_passant.map(|_| MoveFlag::EnPassant),
+                            flag: board
+                                .en_passant
+                                .map_or(MoveFlag::None, |_| MoveFlag::EnPassant),
                             promotion: None,
                             start_square: pos,
                             target_square: target,
@@ -408,7 +411,7 @@ impl Move {
 
                 let mut found_move = Move {
                     capture: None,
-                    flag: None,
+                    flag: MoveFlag::None,
                     start_square: pos,
                     target_square: target,
                     promotion: None,
@@ -436,7 +439,7 @@ impl Move {
 
                 let mut found_move = Move {
                     capture: None,
-                    flag: None,
+                    flag: MoveFlag::None,
                     start_square: pos,
                     target_square: target,
                     promotion: None,
@@ -464,7 +467,7 @@ impl Move {
 
                 let mut found_move = Move {
                     capture: None,
-                    flag: None,
+                    flag: MoveFlag::None,
                     start_square: pos,
                     target_square: target,
                     promotion: None,
@@ -492,7 +495,7 @@ impl Move {
 
                 let mut found_move = Move {
                     capture: None,
-                    flag: None,
+                    flag: MoveFlag::None,
                     start_square: pos,
                     target_square: target,
                     promotion: None,
@@ -520,7 +523,7 @@ impl Move {
 
             let mut found_move = Move {
                 capture: None,
-                flag: None,
+                flag: MoveFlag::None,
                 start_square: pos,
                 target_square: target,
                 promotion: None,
@@ -542,7 +545,7 @@ impl Move {
             {
                 move_list.push(Move {
                     capture: None,
-                    flag: Some(MoveFlag::CastleKingside),
+                    flag: MoveFlag::CastleKingside,
                     promotion: None,
                     start_square: pos,
                     target_square: pos + 2,
@@ -557,7 +560,7 @@ impl Move {
             {
                 move_list.push(Move {
                     capture: None,
-                    flag: Some(MoveFlag::CastleQueenside),
+                    flag: MoveFlag::CastleQueenside,
                     promotion: None,
                     start_square: pos,
                     target_square: pos - 2,

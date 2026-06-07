@@ -284,10 +284,10 @@ impl Board {
     /// It does check beforehand if there is a piece present
     pub fn make_move(&mut self, move_description: &Move) {
         if let Some(piece) = self.piece_at(move_description.start_square) {
-            if let Some(castle) = move_description.flag
-                && (castle == MoveFlag::CastleKingside || castle == MoveFlag::CastleQueenside)
+            if move_description.flag == MoveFlag::CastleKingside
+                || move_description.flag == MoveFlag::CastleQueenside
             {
-                if castle == MoveFlag::CastleKingside {
+                if move_description.flag == MoveFlag::CastleKingside {
                     self.castling_rights.lose(true, self.white_turn);
 
                     self.remove_piece(move_description.start_square);
