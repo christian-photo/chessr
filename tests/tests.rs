@@ -15,14 +15,7 @@ use chessr::{
 fn move_switches_player() {
     let mut board = Board::empty();
     board.add_piece(Piece::new(PieceType::Queen, true), 8);
-    let move_desc = Move {
-        capture: None,
-        moved_piece: PieceType::Queen,
-        flag: MoveFlag::None,
-        promotion: None,
-        start_square: 8,
-        target_square: 16,
-    };
+    let move_desc = Move::simple_move(8, 16, PieceType::Queen);
     assert!(board.is_white_turn());
     board.make_move(&move_desc);
     assert!(!board.is_white_turn());
@@ -43,25 +36,24 @@ fn bitboard_has_piece_at() {
 #[test]
 fn piece_initialization() {
     let p1 = Piece::new(PieceType::Pawn, true);
-    assert_eq!(p1.repr(), 0b00000001);
+    assert_eq!(p1.repr(), 0b00000000);
     assert!(p1.is_white());
     assert_eq!(p1.to_bitboard_index(), 0);
 
     let p2 = Piece::new(PieceType::Knight, false);
-    assert_eq!(p2.repr(), 0b10000010);
+    assert_eq!(p2.repr(), 0b10000001);
     assert!(!p2.is_white());
     assert_eq!(p2.to_bitboard_index(), 7);
 
     let p3 = Piece::new(PieceType::Bishop, false);
-    assert_eq!(p3.repr(), 0b10000100);
+    assert_eq!(p3.repr(), 0b10000010);
     assert_eq!(p3.to_bitboard_index(), 8);
 }
 
 #[test]
 fn fen_reader() {
-    let lookup = precompute_attacks();
     let starting_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    let starting_board = Board::from_fen(starting_fen, &lookup).expect("FEN loading failed");
+    let starting_board = Board::from_fen(starting_fen).expect("FEN loading failed");
     assert!(starting_board.is_white_turn());
     assert!(starting_board.castling_rights.king_side(true));
     assert!(starting_board.castling_rights.king_side(false));
@@ -81,7 +73,7 @@ fn fen_reader() {
     println!("{}", starting_board.to_ascii());
 
     let midgame_fen = "r1bk3r/p2pBpNp/n4n2/1p1NP2P/6P1/3P4/P1P1K3/q5b1 b - - 0 1";
-    let midgame_board = Board::from_fen(midgame_fen, &lookup).expect("FEN loading failed");
+    let midgame_board = Board::from_fen(midgame_fen).expect("FEN loading failed");
 
     assert!(!midgame_board.is_white_turn());
     let bishop_mid = midgame_board
@@ -105,14 +97,14 @@ fn move_moves_piece() {
     board.add_piece(Piece::new(PieceType::Queen, true), 0);
     board.add_piece(Piece::new(PieceType::Pawn, false), 16);
 
-    let capture = Move {
-        capture: Some(PieceType::Pawn),
-        moved_piece: PieceType::Queen,
-        flag: MoveFlag::None,
-        promotion: None,
-        start_square: 0,
-        target_square: 16,
-    };
+    let capture = Move::new(
+        0,
+        16,
+        MoveFlag::None,
+        PieceType::Queen,
+        Some(PieceType::Pawn),
+        None,
+    );
     board.make_move(&capture);
 
     println!("{}", board.to_ascii());
@@ -135,14 +127,13 @@ fn pos_conversion() {
 
 #[test]
 fn knight_moves() {
-    let lookup = precompute_attacks();
     let starting_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1"; // Notice the removed white pawn
-    let mut starting_board = Board::from_fen(starting_fen, &lookup).expect("FEN loading failed");
+    let starting_board = Board::from_fen(starting_fen).expect("FEN loading failed");
     let mut target_squares = vec![11u8, 16, 18, 21, 23];
 
     let mut moves = MoveList::new();
 
-    Move::knight_moves(&mut starting_board, &mut moves);
+    Move::knight_moves(&starting_board, &mut moves);
     for move_desc in moves.iter() {
         let index = target_squares
             .iter()
@@ -157,12 +148,12 @@ fn knight_moves() {
         target_squares
     );
 
-    let mut board2 = Board::from_fen("2K5/8/8/2k5/8/8/3N4/8 w - - 0 13", &lookup).unwrap();
+    let board2 = Board::from_fen("2K5/8/8/2k5/8/8/3N4/8 w - - 0 13").unwrap();
     let mut target_squares2 = vec![1u8, 5, 17, 21, 26, 28];
 
     moves.reset();
 
-    Move::knight_moves(&mut board2, &mut moves);
+    Move::knight_moves(&board2, &mut moves);
     for move_desc in moves.iter() {
         let index = target_squares2
             .iter()
@@ -180,17 +171,13 @@ fn knight_moves() {
 
 #[test]
 fn pawn_moves() {
-    let lookup = precompute_attacks();
-    let mut board = Board::from_fen(
-        "rnbqkbnr/pppp1ppp/8/3Pp3/8/P1r5/3P4/RNBQKBNR w - e6 0 13",
-        &lookup,
-    )
-    .expect("FEN loading failed");
+    let board = Board::from_fen("rnbqkbnr/pppp1ppp/8/3Pp3/8/P1r5/3P4/RNBQKBNR w - e6 0 13")
+        .expect("FEN loading failed");
     let mut target_squares = vec![18u8, 19, 24, 27, 43, 44];
 
     let mut moves = MoveList::new();
 
-    Move::pawn_moves(&mut board, &mut moves);
+    Move::pawn_moves(&board, &mut moves);
     for move_desc in moves.iter() {
         let index = target_squares
             .iter()
@@ -213,7 +200,7 @@ fn no_pinned_move() {}
 #[test]
 fn algebraic_move_notation() {
     let lookup = precompute_attacks();
-    let mut board = Board::from_fen("1RK3b1/RP3P2/P7/2k5/8/6N1/3N4/8 w - - 0 13", &lookup).unwrap();
+    let board = Board::from_fen("1RK3b1/RP3P2/P7/2k5/8/6N1/3N4/8 w - - 0 13").unwrap();
 
     let algebraic_moves = vec![
         "Nb1", "Nb3", "Nc4", "Nde4", "Nf3", "Ndf1", // Knight d-file
@@ -224,7 +211,7 @@ fn algebraic_move_notation() {
         "f8=Q", "f8=R", "f8=B", "f8=N", "fxg8=Q", "fxg8=R", "fxg8=B", "fxg8=N", // Pawn f-file
     ];
 
-    let moves = Move::generate_legal_moves(&mut board, &lookup);
+    let moves = Move::generate_moves(&board, &lookup);
     for move_desc in moves.iter() {
         let algebraic = move_desc.to_algebraic(
             &board,
@@ -240,17 +227,9 @@ fn algebraic_move_notation() {
 
 #[test]
 fn undo_promotion() {
-    let lookup = precompute_attacks();
-    let mut board = Board::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1", &lookup).unwrap();
+    let mut board = Board::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1").unwrap();
 
-    let promotion = Move {
-        capture: None,
-        moved_piece: PieceType::Pawn,
-        flag: MoveFlag::None,
-        promotion: Some(PieceType::Queen),
-        start_square: 51,
-        target_square: 59,
-    };
+    let promotion = Move::promotion(51, 59, PieceType::Queen, None);
     let copy = board.clone();
     board.make_move(&promotion);
 

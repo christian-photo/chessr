@@ -86,8 +86,8 @@ impl Move {
             target,
             MoveFlag::None,
             PieceType::Pawn,
-            Some(promotion),
             capture,
+            Some(promotion),
         )
     }
 
