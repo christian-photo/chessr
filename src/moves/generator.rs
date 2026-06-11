@@ -265,7 +265,8 @@ impl Move {
 
 // Move generation
 impl Move {
-    pub fn generate_legal_moves(board: &Board, lookup: &SlidingAttackLookup) -> MoveList {
+    /// Generates pseudo legal moves
+    pub fn generate_moves(board: &Board, lookup: &SlidingAttackLookup) -> MoveList {
         let mut moves = MoveList::new();
 
         Move::pawn_moves(board, &mut moves);

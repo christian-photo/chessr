@@ -11,31 +11,55 @@ fn move_generation_benchmark(c: &mut Criterion) {
         .expect("Fen is valid");
 
     c.bench_function("Move generation", |b| {
-        b.iter(|| Move::generate_legal_moves(&board, &lookup))
+        b.iter(|| Move::generate_moves(&board, &lookup))
     });
 
     c.bench_function("Knight move generation", |b| {
-        b.iter(|| Move::knight_moves(&board, &mut MoveList::new()))
+        let mut list = MoveList::new();
+        b.iter(|| {
+            Move::knight_moves(&board, &mut list);
+            list.reset();
+        })
     });
 
     c.bench_function("Pawn move generation", |b| {
-        b.iter(|| Move::pawn_moves(&board, &mut MoveList::new()))
+        let mut list = MoveList::new();
+        b.iter(|| {
+            Move::pawn_moves(&board, &mut list);
+            list.reset();
+        })
     });
 
     c.bench_function("Bishop move generation", |b| {
-        b.iter(|| Move::bishop_moves(&board, &mut MoveList::new(), &lookup))
+        let mut list = MoveList::new();
+        b.iter(|| {
+            Move::bishop_moves(&board, &mut list, &lookup);
+            list.reset();
+        })
     });
 
     c.bench_function("Rook move generation", |b| {
-        b.iter(|| Move::rook_moves(&board, &mut MoveList::new(), &lookup))
+        let mut list = MoveList::new();
+        b.iter(|| {
+            Move::rook_moves(&board, &mut list, &lookup);
+            list.reset();
+        })
     });
 
     c.bench_function("Queen move generation", |b| {
-        b.iter(|| Move::queen_moves(&board, &mut MoveList::new(), &lookup))
+        let mut list = MoveList::new();
+        b.iter(|| {
+            Move::queen_moves(&board, &mut list, &lookup);
+            list.reset();
+        })
     });
 
     c.bench_function("King move generation", |b| {
-        b.iter(|| Move::king_moves(&board, &mut MoveList::new()))
+        let mut list = MoveList::new();
+        b.iter(|| {
+            Move::king_moves(&board, &mut list);
+            list.reset();
+        })
     });
 }
 
