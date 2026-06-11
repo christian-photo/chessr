@@ -9,7 +9,7 @@ use crate::{
 #[repr(u8)]
 pub enum MoveFlag {
     #[default]
-    None = 0,
+    None,
     EnPassant,
     CastleKingside,
     CastleQueenside,
@@ -18,7 +18,6 @@ pub enum MoveFlag {
 pub struct MoveList {
     moves: [Move; 218],
     len: usize,
-    pub attacked_squares: [u8; 64],
 }
 
 impl MoveList {
@@ -26,20 +25,13 @@ impl MoveList {
         MoveList {
             moves: [Move::default(); 218],
             len: 0,
-            attacked_squares: [0; 64],
         }
     }
 
+    #[inline(always)]
     pub fn push(&mut self, m: Move) {
         self.moves[self.len] = m;
         self.len += 1;
-        self.attacked_squares[m.target_square as usize] += 1; // TODO: Each promotion is a seperate move, thereby distorting the result
-    }
-
-    pub fn push_if_legal(&mut self, m: Move, board: &Board) {
-        if m.is_legal(board) {
-            self.push(m);
-        }
     }
 
     pub fn iter(&self) -> &[Move] {
@@ -56,10 +48,75 @@ pub struct Move {
     pub start_square: u8,
     pub target_square: u8,
 
-    pub flag: MoveFlag,
+    /// Includes the move flag in the first 4 bits, the piece type in the last 4 bits
+    supplement: u8,
 
     pub capture: Option<PieceType>,
     pub promotion: Option<PieceType>,
+}
+
+impl Move {
+    #[inline(always)]
+    pub fn new(
+        start: u8,
+        target: u8,
+        flag: MoveFlag,
+        piece: PieceType,
+        capture: Option<PieceType>,
+        promotion: Option<PieceType>,
+    ) -> Self {
+        Move {
+            start_square: start,
+            target_square: target,
+            supplement: flag as u8 | ((piece as u8) << 4),
+            capture,
+            promotion,
+        }
+    }
+
+    #[inline(always)]
+    pub fn promotion(
+        start: u8,
+        target: u8,
+        promotion: PieceType,
+        capture: Option<PieceType>,
+    ) -> Self {
+        Move::new(
+            start,
+            target,
+            MoveFlag::None,
+            PieceType::Pawn,
+            Some(promotion),
+            capture,
+        )
+    }
+
+    #[inline(always)]
+    pub fn simple_move(start: u8, target: u8, piece: PieceType) -> Self {
+        Move::new(start, target, MoveFlag::None, piece, None, None)
+    }
+
+    pub fn get_flag(&self) -> MoveFlag {
+        match self.supplement & 0b1111 {
+            0 => MoveFlag::None,
+            1 => MoveFlag::EnPassant,
+            2 => MoveFlag::CastleKingside,
+            3 => MoveFlag::CastleQueenside,
+            _ => MoveFlag::None,
+        }
+    }
+
+    pub fn get_piece(&self) -> PieceType {
+        match self.supplement >> 4 {
+            0 => PieceType::Pawn,
+            1 => PieceType::Knight,
+            2 => PieceType::Bishop,
+            3 => PieceType::Rook,
+            4 => PieceType::Queen,
+            5 => PieceType::King,
+            _ => PieceType::Pawn,
+        }
+    }
 }
 
 // Move methods
@@ -127,7 +184,9 @@ impl Move {
             }
         }
 
-        if self.flag == MoveFlag::CastleKingside || self.flag == MoveFlag::CastleQueenside {
+        if self.get_flag() == MoveFlag::CastleKingside
+            || self.get_flag() == MoveFlag::CastleQueenside
+        {
             if self.target_square == 6 || self.target_square == 62 {
                 return "O-O".to_string();
             } else {
@@ -206,7 +265,7 @@ impl Move {
 
 // Move generation
 impl Move {
-    pub fn generate_legal_moves(board: &mut Board, lookup: &SlidingAttackLookup) -> MoveList {
+    pub fn generate_legal_moves(board: &Board, lookup: &SlidingAttackLookup) -> MoveList {
         let mut moves = MoveList::new();
 
         Move::pawn_moves(board, &mut moves);
@@ -214,9 +273,7 @@ impl Move {
         Move::bishop_moves(board, &mut moves, lookup);
         Move::rook_moves(board, &mut moves, lookup);
         Move::queen_moves(board, &mut moves, lookup);
-        Move::king_moves(board, &mut moves, &board.attacked_squares);
-
-        board.attacked_squares = moves.attacked_squares;
+        Move::king_moves(board, &mut moves);
 
         moves
     }
@@ -231,43 +288,10 @@ impl Move {
             move_list: &mut MoveList,
         ) -> bool {
             if board.is_white_turn() && target >= 56 || !board.is_white_turn() && target <= 7 {
-                let queen_prom = Move {
-                    capture,
-                    flag: MoveFlag::None,
-                    promotion: Some(PieceType::Queen),
-                    start_square: pos,
-                    target_square: target,
-                };
-                // We only need to check legality for one move/promotion because the promoted piece type can not influence legality and the move is otherwise the same
-                if !queen_prom.is_legal(board) {
-                    return false;
-                }
-
-                move_list.push(queen_prom);
-
-                move_list.push(Move {
-                    capture,
-                    flag: MoveFlag::None,
-                    promotion: Some(PieceType::Rook),
-                    start_square: pos,
-                    target_square: target,
-                });
-
-                move_list.push(Move {
-                    capture,
-                    flag: MoveFlag::None,
-                    promotion: Some(PieceType::Bishop),
-                    start_square: pos,
-                    target_square: target,
-                });
-
-                move_list.push(Move {
-                    capture,
-                    flag: MoveFlag::None,
-                    promotion: Some(PieceType::Knight),
-                    start_square: pos,
-                    target_square: target,
-                });
+                move_list.push(Move::promotion(pos, target, PieceType::Queen, capture));
+                move_list.push(Move::promotion(pos, target, PieceType::Rook, capture));
+                move_list.push(Move::promotion(pos, target, PieceType::Bishop, capture));
+                move_list.push(Move::promotion(pos, target, PieceType::Knight, capture));
 
                 return true;
             } else {
@@ -287,6 +311,7 @@ impl Move {
             captureable_squares = white_pieces;
             attack_map = &BLACK_PAWN_ATTACK;
 
+            // TODO: Verify
             let mut single_advance = (pieces | (pawns >> 8)) & !pieces;
             let mut double_advance = (pieces | ((single_advance & (0b11111111 << 24) ) >> 8)) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
                 & !pieces; // Double advance is only possible on the first move, so we mask the sixth rank
@@ -295,32 +320,14 @@ impl Move {
                 let target = pop_lsb(&mut single_advance);
                 let pos = target + 8;
                 if !promote_if_possible(board, pos, target, None, move_list) {
-                    move_list.push_if_legal(
-                        Move {
-                            capture: None,
-                            flag: MoveFlag::None,
-                            promotion: None,
-                            start_square: pos,
-                            target_square: target,
-                        },
-                        board,
-                    );
+                    move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
                 }
             }
 
             while double_advance != 0 {
                 let target = pop_lsb(&mut double_advance);
                 let pos = target + 16;
-                move_list.push_if_legal(
-                    Move {
-                        capture: None,
-                        flag: MoveFlag::None,
-                        promotion: None,
-                        start_square: pos,
-                        target_square: target,
-                    },
-                    board,
-                );
+                move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
             }
         } else {
             captureable_squares = black_pieces;
@@ -334,32 +341,14 @@ impl Move {
                 let target = pop_lsb(&mut single_advance);
                 let pos = target - 8;
                 if !promote_if_possible(board, pos, target, None, move_list) {
-                    move_list.push_if_legal(
-                        Move {
-                            capture: None,
-                            flag: MoveFlag::None,
-                            promotion: None,
-                            start_square: pos,
-                            target_square: target,
-                        },
-                        board,
-                    );
+                    move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
                 }
             }
 
             while double_advance != 0 {
                 let target = pop_lsb(&mut double_advance);
                 let pos = target - 16;
-                move_list.push_if_legal(
-                    Move {
-                        capture: None,
-                        flag: MoveFlag::None,
-                        promotion: None,
-                        start_square: pos,
-                        target_square: target,
-                    },
-                    board,
-                );
+                move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
             }
         }
 
@@ -379,18 +368,20 @@ impl Move {
                     .map_or(PieceType::Pawn, |p| p.piece_type());
 
                 if !promote_if_possible(board, pos, target, Some(capture), move_list) {
-                    move_list.push_if_legal(
-                        Move {
-                            capture: Some(capture),
-                            flag: board
-                                .en_passant
-                                .map_or(MoveFlag::None, |_| MoveFlag::EnPassant),
-                            promotion: None,
-                            start_square: pos,
-                            target_square: target,
-                        },
-                        board,
-                    );
+                    move_list.push(Move::new(
+                        pos,
+                        target,
+                        board.en_passant.map_or(MoveFlag::None, |sq| {
+                            if sq == target {
+                                MoveFlag::EnPassant
+                            } else {
+                                MoveFlag::None
+                            }
+                        }),
+                        PieceType::Pawn,
+                        Some(capture),
+                        None,
+                    ));
                 }
             }
         }
@@ -409,17 +400,14 @@ impl Move {
             while attack_map != 0 {
                 let target = pop_lsb(&mut attack_map);
 
-                let mut found_move = Move {
-                    capture: None,
-                    flag: MoveFlag::None,
-                    start_square: pos,
-                    target_square: target,
-                    promotion: None,
-                };
-
-                found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
-
-                move_list.push_if_legal(found_move, board);
+                move_list.push(Move::new(
+                    pos,
+                    target,
+                    MoveFlag::None,
+                    PieceType::Knight,
+                    board.pieces[target as usize].map(|p| p.piece_type()),
+                    None,
+                ));
             }
         }
     }
@@ -437,17 +425,14 @@ impl Move {
             while attack_map != 0 {
                 let target = pop_lsb(&mut attack_map);
 
-                let mut found_move = Move {
-                    capture: None,
-                    flag: MoveFlag::None,
-                    start_square: pos,
-                    target_square: target,
-                    promotion: None,
-                };
-
-                found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
-
-                move_list.push_if_legal(found_move, board);
+                move_list.push(Move::new(
+                    pos,
+                    target,
+                    MoveFlag::None,
+                    PieceType::Bishop,
+                    board.pieces[target as usize].map(|p| p.piece_type()),
+                    None,
+                ));
             }
         }
     }
@@ -465,17 +450,14 @@ impl Move {
             while attack_map != 0 {
                 let target = pop_lsb(&mut attack_map);
 
-                let mut found_move = Move {
-                    capture: None,
-                    flag: MoveFlag::None,
-                    start_square: pos,
-                    target_square: target,
-                    promotion: None,
-                };
-
-                found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
-
-                move_list.push_if_legal(found_move, board);
+                move_list.push(Move::new(
+                    pos,
+                    target,
+                    MoveFlag::None,
+                    PieceType::Rook,
+                    board.pieces[target as usize].map(|p| p.piece_type()),
+                    None,
+                ));
             }
         }
     }
@@ -493,22 +475,19 @@ impl Move {
             while attack_map != 0 {
                 let target = pop_lsb(&mut attack_map);
 
-                let mut found_move = Move {
-                    capture: None,
-                    flag: MoveFlag::None,
-                    start_square: pos,
-                    target_square: target,
-                    promotion: None,
-                };
-
-                found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
-
-                move_list.push_if_legal(found_move, board);
+                move_list.push(Move::new(
+                    pos,
+                    target,
+                    MoveFlag::None,
+                    PieceType::Queen,
+                    board.pieces[target as usize].map(|p| p.piece_type()),
+                    None,
+                ));
             }
         }
     }
 
-    pub fn king_moves(board: &Board, move_list: &mut MoveList, attacked_squares: &[u8; 64]) {
+    pub fn king_moves(board: &Board, move_list: &mut MoveList) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
         let mut king = board.bitboards[5 + side * 6].get_u64();
         let friendly = board.bitboards[12 + side].get_u64();
@@ -521,51 +500,42 @@ impl Move {
         while attack_map != 0 {
             let target = pop_lsb(&mut attack_map);
 
-            let mut found_move = Move {
-                capture: None,
-                flag: MoveFlag::None,
-                start_square: pos,
-                target_square: target,
-                promotion: None,
-            };
-
-            found_move.capture = board.pieces[target as usize].map(|p| p.piece_type());
-
-            move_list.push_if_legal(found_move, board);
+            move_list.push(Move::new(
+                pos,
+                target,
+                MoveFlag::None,
+                PieceType::King,
+                board.pieces[target as usize].map(|p| p.piece_type()),
+                None,
+            ));
         }
 
         let kingside_castle_mask = 0b11 << (5 + 56 * side);
         let queenside_castle_mask = 0b111 << (1 + 56 * side);
 
-        if board.castling_rights.king_side(board.is_white_turn()) {
-            if attacked_squares[pos as usize] == 0
-                && attacked_squares[pos as usize + 1] == 0
-                && attacked_squares[pos as usize + 2] == 0
-                && occupancy & kingside_castle_mask == 0
-            {
-                move_list.push(Move {
-                    capture: None,
-                    flag: MoveFlag::CastleKingside,
-                    promotion: None,
-                    start_square: pos,
-                    target_square: pos + 2,
-                })
-            }
+        if board.castling_rights.king_side(board.is_white_turn())
+            && occupancy & kingside_castle_mask == 0
+        {
+            move_list.push(Move::new(
+                pos,
+                pos + 2,
+                MoveFlag::CastleKingside,
+                PieceType::King,
+                None,
+                None,
+            ));
         }
-        if board.castling_rights.queen_side(board.is_white_turn()) {
-            if attacked_squares[pos as usize] == 0
-                && attacked_squares[pos as usize - 1] == 0
-                && attacked_squares[pos as usize - 2] == 0
-                && occupancy & queenside_castle_mask == 0
-            {
-                move_list.push(Move {
-                    capture: None,
-                    flag: MoveFlag::CastleQueenside,
-                    promotion: None,
-                    start_square: pos,
-                    target_square: pos - 2,
-                })
-            }
+        if board.castling_rights.queen_side(board.is_white_turn())
+            && occupancy & queenside_castle_mask == 0
+        {
+            move_list.push(Move::new(
+                pos,
+                pos - 2,
+                MoveFlag::CastleQueenside,
+                PieceType::King,
+                None,
+                None,
+            ));
         }
     }
 

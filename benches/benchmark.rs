@@ -6,16 +6,13 @@ use chessr::{
 use criterion::{Criterion, criterion_group, criterion_main};
 
 fn move_generation_benchmark(c: &mut Criterion) {
-    let mut board =
-        Board::from_fen("rnbqkbnr/pp2pppp/2p5/3p4/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 1")
-            .expect("Fen is valid");
     let lookup = precompute_attacks();
+    let board = Board::from_fen("rnbqkbnr/pp2pppp/2p5/3p4/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 1")
+        .expect("Fen is valid");
 
-    // Add back in when all movement generators are implemented
-    // c.bench_function("Move generation", |b| {
-    //     b.iter(|| Move::generate_legal_moves(&mut board))
-    // });
-    //
+    c.bench_function("Move generation", |b| {
+        b.iter(|| Move::generate_legal_moves(&board, &lookup))
+    });
 
     c.bench_function("Knight move generation", |b| {
         b.iter(|| Move::knight_moves(&board, &mut MoveList::new()))
@@ -36,18 +33,16 @@ fn move_generation_benchmark(c: &mut Criterion) {
     c.bench_function("Queen move generation", |b| {
         b.iter(|| Move::queen_moves(&board, &mut MoveList::new(), &lookup))
     });
+
+    c.bench_function("King move generation", |b| {
+        b.iter(|| Move::king_moves(&board, &mut MoveList::new()))
+    });
 }
 
 fn move_making_benchmark(c: &mut Criterion) {
     let mut board = Board::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1").unwrap();
 
-    let promotion = Move {
-        capture: None,
-        flag: chessr::moves::generator::MoveFlag::None,
-        promotion: Some(PieceType::Queen),
-        start_square: 51,
-        target_square: 59,
-    };
+    let promotion = Move::promotion(51, 59, PieceType::Queen, None);
 
     c.bench_function("Do/Undo move", |b| {
         b.iter(|| {

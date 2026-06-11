@@ -1,12 +1,13 @@
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 #[repr(u8)]
 pub enum PieceType {
-    Pawn = 0b1,
-    Knight = 0b10,
-    Bishop = 0b100,
-    Rook = 0b1000,
-    Queen = 0b10000,
-    King = 0b100000,
+    #[default]
+    Pawn,
+    Knight,
+    Bishop,
+    Rook,
+    Queen,
+    King,
 }
 
 impl PieceType {
@@ -50,12 +51,12 @@ impl PieceType {
         let cleaned = repr & !(0b1 << 7); // Remove the black/white indication bit
 
         match cleaned {
-            0b1 => PieceType::Pawn,
-            0b10 => PieceType::Knight,
-            0b100 => PieceType::Bishop,
-            0b1000 => PieceType::Rook,
-            0b10000 => PieceType::Queen,
-            0b100000 => PieceType::King,
+            0 => PieceType::Pawn,
+            1 => PieceType::Knight,
+            2 => PieceType::Bishop,
+            3 => PieceType::Rook,
+            4 => PieceType::Queen,
+            5 => PieceType::King,
             _ => panic!("Unrecognized binary representation"),
         }
     }
@@ -96,7 +97,7 @@ impl Piece {
     }
 
     pub fn to_bitboard_index(&self) -> usize {
-        self.repr.trailing_zeros() as usize + (!self.is_white() as usize) * 6
+        (self.repr & !(0b1 << 7)) as usize + (!self.is_white() as usize) * 6
     }
 }
 

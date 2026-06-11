@@ -1,4 +1,7 @@
-use crate::moves::generator::{Move, MoveFlag};
+use crate::moves::{
+    generator::{Move, MoveFlag},
+    sliding::SlidingAttackLookup,
+};
 pub use crate::piece::{Piece, PieceType};
 
 #[derive(Debug, Clone, Copy)]
@@ -123,8 +126,6 @@ pub struct Board {
 
     white_turn: bool,
 
-    pub attacked_squares: [u8; 64],
-
     /// Holds the castling rights for both white and black, works with a single byte internally
     pub castling_rights: CastlingRights,
 
@@ -140,7 +141,6 @@ impl Board {
         Board {
             bitboards: [Bitboard::empty(); 14],
             pieces: [None; 64],
-            attacked_squares: [0; 64],
             white_turn: true,
             castling_rights: CastlingRights::none(),
             en_passant: None,
@@ -284,10 +284,10 @@ impl Board {
     /// It does check beforehand if there is a piece present
     pub fn make_move(&mut self, move_description: &Move) {
         if let Some(piece) = self.piece_at(move_description.start_square) {
-            if move_description.flag == MoveFlag::CastleKingside
-                || move_description.flag == MoveFlag::CastleQueenside
+            if move_description.get_flag() == MoveFlag::CastleKingside
+                || move_description.get_flag() == MoveFlag::CastleQueenside
             {
-                if move_description.flag == MoveFlag::CastleKingside {
+                if move_description.get_flag() == MoveFlag::CastleKingside {
                     self.castling_rights.lose(true, self.white_turn);
 
                     self.remove_piece(move_description.start_square);

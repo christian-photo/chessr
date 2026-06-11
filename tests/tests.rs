@@ -2,9 +2,10 @@ use chessr::{
     board::{Bitboard, Board},
     moves::{
         Move, MoveList,
+        generator::MoveFlag,
         sliding::{
-            SlidingAttackLookup, TOTAL_BISHOP_ATTACKS, TOTAL_ROOK_ATTACKS, bishop_array_length,
-            precompute_attacks, rook_array_length,
+            TOTAL_BISHOP_ATTACKS, TOTAL_ROOK_ATTACKS, bishop_array_length, precompute_attacks,
+            rook_array_length,
         },
     },
     piece::{Piece, PieceType},
@@ -16,7 +17,8 @@ fn move_switches_player() {
     board.add_piece(Piece::new(PieceType::Queen, true), 8);
     let move_desc = Move {
         capture: None,
-        flag: None,
+        moved_piece: PieceType::Queen,
+        flag: MoveFlag::None,
         promotion: None,
         start_square: 8,
         target_square: 16,
@@ -57,8 +59,9 @@ fn piece_initialization() {
 
 #[test]
 fn fen_reader() {
+    let lookup = precompute_attacks();
     let starting_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    let starting_board = Board::from_fen(starting_fen).expect("FEN loading failed");
+    let starting_board = Board::from_fen(starting_fen, &lookup).expect("FEN loading failed");
     assert!(starting_board.is_white_turn());
     assert!(starting_board.castling_rights.king_side(true));
     assert!(starting_board.castling_rights.king_side(false));
@@ -78,7 +81,7 @@ fn fen_reader() {
     println!("{}", starting_board.to_ascii());
 
     let midgame_fen = "r1bk3r/p2pBpNp/n4n2/1p1NP2P/6P1/3P4/P1P1K3/q5b1 b - - 0 1";
-    let midgame_board = Board::from_fen(midgame_fen).expect("FEN loading failed");
+    let midgame_board = Board::from_fen(midgame_fen, &lookup).expect("FEN loading failed");
 
     assert!(!midgame_board.is_white_turn());
     let bishop_mid = midgame_board
@@ -103,8 +106,9 @@ fn move_moves_piece() {
     board.add_piece(Piece::new(PieceType::Pawn, false), 16);
 
     let capture = Move {
-        capture: Some(PieceType::Queen),
-        flag: None,
+        capture: Some(PieceType::Pawn),
+        moved_piece: PieceType::Queen,
+        flag: MoveFlag::None,
         promotion: None,
         start_square: 0,
         target_square: 16,
@@ -131,8 +135,9 @@ fn pos_conversion() {
 
 #[test]
 fn knight_moves() {
+    let lookup = precompute_attacks();
     let starting_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1"; // Notice the removed white pawn
-    let mut starting_board = Board::from_fen(starting_fen).expect("FEN loading failed");
+    let mut starting_board = Board::from_fen(starting_fen, &lookup).expect("FEN loading failed");
     let mut target_squares = vec![11u8, 16, 18, 21, 23];
 
     let mut moves = MoveList::new();
@@ -152,7 +157,7 @@ fn knight_moves() {
         target_squares
     );
 
-    let mut board2 = Board::from_fen("2K5/8/8/2k5/8/8/3N4/8 w - - 0 13").unwrap();
+    let mut board2 = Board::from_fen("2K5/8/8/2k5/8/8/3N4/8 w - - 0 13", &lookup).unwrap();
     let mut target_squares2 = vec![1u8, 5, 17, 21, 26, 28];
 
     moves.reset();
@@ -175,8 +180,12 @@ fn knight_moves() {
 
 #[test]
 fn pawn_moves() {
-    let mut board = Board::from_fen("rnbqkbnr/pppp1ppp/8/3Pp3/8/P1r5/3P4/RNBQKBNR w - e6 0 13")
-        .expect("FEN loading failed");
+    let lookup = precompute_attacks();
+    let mut board = Board::from_fen(
+        "rnbqkbnr/pppp1ppp/8/3Pp3/8/P1r5/3P4/RNBQKBNR w - e6 0 13",
+        &lookup,
+    )
+    .expect("FEN loading failed");
     let mut target_squares = vec![18u8, 19, 24, 27, 43, 44];
 
     let mut moves = MoveList::new();
@@ -203,15 +212,15 @@ fn no_pinned_move() {}
 
 #[test]
 fn algebraic_move_notation() {
-    let mut board = Board::from_fen("1RK3b1/RP3P2/P7/2k5/8/6N1/3N4/8 w - - 0 13").unwrap();
     let lookup = precompute_attacks();
+    let mut board = Board::from_fen("1RK3b1/RP3P2/P7/2k5/8/6N1/3N4/8 w - - 0 13", &lookup).unwrap();
 
     let algebraic_moves = vec![
         "Nb1", "Nb3", "Nc4", "Nde4", "Nf3", "Ndf1", // Knight d-file
         "Nh1", "Ngf1", "Ne2", "Nge4", "Nf5", "Nh5",  // Knight g-file
         "Raa8", // Rook a-file
         "Rba8", // Rook b-file
-        "Kd8",  // King
+        "Kd8", "Kd7", "Kc7", // King
         "f8=Q", "f8=R", "f8=B", "f8=N", "fxg8=Q", "fxg8=R", "fxg8=B", "fxg8=N", // Pawn f-file
     ];
 
@@ -231,11 +240,13 @@ fn algebraic_move_notation() {
 
 #[test]
 fn undo_promotion() {
-    let mut board = Board::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1").unwrap();
+    let lookup = precompute_attacks();
+    let mut board = Board::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1", &lookup).unwrap();
 
     let promotion = Move {
         capture: None,
-        flag: None,
+        moved_piece: PieceType::Pawn,
+        flag: MoveFlag::None,
         promotion: Some(PieceType::Queen),
         start_square: 51,
         target_square: 59,
