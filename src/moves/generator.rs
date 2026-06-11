@@ -275,26 +275,6 @@ impl Move {
     }
 
     pub fn pawn_moves(board: &Board, move_list: &mut MoveList) {
-        // Moves that involve promotions, should generate a new move for each possible promotion
-        fn promote_if_possible(
-            board: &Board,
-            pos: u8,
-            target: u8,
-            capture: Option<PieceType>,
-            move_list: &mut MoveList,
-        ) -> bool {
-            if board.is_white_turn() && target >= 56 || !board.is_white_turn() && target <= 7 {
-                move_list.push(Move::promotion(pos, target, PieceType::Queen, capture));
-                move_list.push(Move::promotion(pos, target, PieceType::Rook, capture));
-                move_list.push(Move::promotion(pos, target, PieceType::Bishop, capture));
-                move_list.push(Move::promotion(pos, target, PieceType::Knight, capture));
-
-                return true;
-            } else {
-                return false;
-            }
-        }
-
         let mut pawns = board.bitboards[0 + (!board.is_white_turn() as usize) * 6].get_u64();
         let white_pieces = board.bitboards[12].get_u64();
         let black_pieces = board.bitboards[13].get_u64();
@@ -303,26 +283,34 @@ impl Move {
         let mut captureable_squares: u64;
         let attack_map: &[u64; 64];
 
-        if !board.is_white_turn() {
-            captureable_squares = white_pieces;
-            attack_map = &BLACK_PAWN_ATTACK;
+        if board.is_white_turn() {
+            captureable_squares = black_pieces;
+            attack_map = &WHITE_PAWN_ATTACK;
 
-            // TODO: Verify
-            let mut single_advance = (pieces | (pawns >> 8)) & !pieces;
-            let mut double_advance = (pieces | ((single_advance & (0b11111111 << 24) ) >> 8)) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
-                & !pieces; // Double advance is only possible on the first move, so we mask the sixth rank
+            let mut single_advance = (pieces | (pawns << 8)) & !pieces;
+            let mut promotions = single_advance & (0b11111111 << 56);
+            single_advance = single_advance & !promotions;
+            let mut double_advance = (pieces | ((single_advance & (0b11111111 << 16)) << 8)) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
+                & !pieces; // Double advance is only possible on the first move, so we mask the third rank
 
             while single_advance != 0 {
                 let target = pop_lsb(&mut single_advance);
-                let pos = target + 8;
-                if !promote_if_possible(board, pos, target, None, move_list) {
-                    move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
-                }
+                let pos = target - 8;
+                move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
+            }
+
+            while promotions != 0 {
+                let target = pop_lsb(&mut promotions);
+                let pos = target - 8;
+                move_list.push(Move::promotion(pos, target, PieceType::Queen, None));
+                move_list.push(Move::promotion(pos, target, PieceType::Rook, None));
+                move_list.push(Move::promotion(pos, target, PieceType::Bishop, None));
+                move_list.push(Move::promotion(pos, target, PieceType::Knight, None));
             }
 
             while double_advance != 0 {
                 let target = pop_lsb(&mut double_advance);
-                let pos = target + 16;
+                let pos = target - 16;
                 move_list.push(Move::new(
                     pos,
                     target,
@@ -333,24 +321,34 @@ impl Move {
                 ));
             }
         } else {
-            captureable_squares = black_pieces;
-            attack_map = &WHITE_PAWN_ATTACK;
+            captureable_squares = white_pieces;
+            attack_map = &BLACK_PAWN_ATTACK;
 
-            let mut single_advance = (pieces | (pawns << 8)) & !pieces;
-            let mut double_advance = (pieces | ((single_advance & (0b11111111 << 16)) << 8)) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
-                & !pieces; // Double advance is only possible on the first move, so we mask the third rank
+            // TODO: Verify
+            let mut single_advance = (pieces | (pawns >> 8)) & !pieces;
+            let mut promotions = single_advance & 0b11111111;
+            single_advance = single_advance & !promotions;
+            let mut double_advance = (pieces | ((single_advance & (0b11111111 << 24) ) >> 8)) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
+                & !pieces; // Double advance is only possible on the first move, so we mask the sixth rank
 
             while single_advance != 0 {
                 let target = pop_lsb(&mut single_advance);
-                let pos = target - 8;
-                if !promote_if_possible(board, pos, target, None, move_list) {
-                    move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
-                }
+                let pos = target + 8;
+                move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
+            }
+
+            while promotions != 0 {
+                let target = pop_lsb(&mut promotions);
+                let pos = target + 8;
+                move_list.push(Move::promotion(pos, target, PieceType::Queen, None));
+                move_list.push(Move::promotion(pos, target, PieceType::Rook, None));
+                move_list.push(Move::promotion(pos, target, PieceType::Bishop, None));
+                move_list.push(Move::promotion(pos, target, PieceType::Knight, None));
             }
 
             while double_advance != 0 {
                 let target = pop_lsb(&mut double_advance);
-                let pos = target - 16;
+                let pos = target + 16;
                 move_list.push(Move::new(
                     pos,
                     target,
@@ -371,13 +369,23 @@ impl Move {
 
             let mut capture_targets = attack_map[pos as usize] & captureable_squares;
 
-            while capture_targets != 0 {
-                let target = pop_lsb(&mut capture_targets);
-                let capture = board
-                    .piece_at(target)
-                    .map_or(PieceType::Pawn, |p| p.piece_type());
+            if capture_targets & (0b11111111 << (56 * board.is_white_turn() as u8)) != 0 {
+                while capture_targets != 0 {
+                    let target = pop_lsb(&mut capture_targets);
+                    let capture = board.piece_at(target).map(|p| p.piece_type());
 
-                if !promote_if_possible(board, pos, target, Some(capture), move_list) {
+                    move_list.push(Move::promotion(pos, target, PieceType::Queen, capture));
+                    move_list.push(Move::promotion(pos, target, PieceType::Rook, capture));
+                    move_list.push(Move::promotion(pos, target, PieceType::Bishop, capture));
+                    move_list.push(Move::promotion(pos, target, PieceType::Knight, capture));
+                }
+            } else {
+                while capture_targets != 0 {
+                    let target = pop_lsb(&mut capture_targets);
+                    let capture = board
+                        .piece_at(target)
+                        .map_or(PieceType::Pawn, |p| p.piece_type()); // Needed because on the en passant square, there is no piece
+
                     move_list.push(Move::new(
                         pos,
                         target,

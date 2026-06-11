@@ -91,7 +91,7 @@ fn engine_startup_benchmark(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    // move_generation_benchmark,
+    move_generation_benchmark,
     move_making_benchmark,
     engine_startup_benchmark
 );

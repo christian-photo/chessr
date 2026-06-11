@@ -44,6 +44,7 @@ fn pawn_moves() {
 
     Move::pawn_moves(&board, &mut moves);
     for move_desc in moves.iter() {
+        println!("{:?}", move_desc);
         let index = target_squares
             .iter()
             .position(|x| *x == move_desc.target_square)
