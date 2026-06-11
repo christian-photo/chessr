@@ -13,6 +13,8 @@ pub enum MoveFlag {
     EnPassant,
     CastleKingside,
     CastleQueenside,
+    Promotion,
+    DoublePawnPush,
 }
 
 pub struct MoveList {
@@ -84,7 +86,7 @@ impl Move {
         Move::new(
             start,
             target,
-            MoveFlag::None,
+            MoveFlag::Promotion,
             PieceType::Pawn,
             capture,
             Some(promotion),
@@ -102,6 +104,8 @@ impl Move {
             1 => MoveFlag::EnPassant,
             2 => MoveFlag::CastleKingside,
             3 => MoveFlag::CastleQueenside,
+            4 => MoveFlag::Promotion,
+            5 => MoveFlag::DoublePawnPush,
             _ => MoveFlag::None,
         }
     }
@@ -252,15 +256,6 @@ impl Move {
             ),
         };
     }
-
-    pub fn is_legal(&self, board: &Board) -> bool {
-        let is_king = board.bitboards[5 + (!board.is_white_turn() as usize) * 6]
-            .has_piece_at(self.start_square);
-
-        if !is_king {}
-
-        return true;
-    }
 }
 
 // Move generation
@@ -328,7 +323,14 @@ impl Move {
             while double_advance != 0 {
                 let target = pop_lsb(&mut double_advance);
                 let pos = target + 16;
-                move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
+                move_list.push(Move::new(
+                    pos,
+                    target,
+                    MoveFlag::DoublePawnPush,
+                    PieceType::Pawn,
+                    None,
+                    None,
+                ));
             }
         } else {
             captureable_squares = black_pieces;
@@ -349,7 +351,14 @@ impl Move {
             while double_advance != 0 {
                 let target = pop_lsb(&mut double_advance);
                 let pos = target - 16;
-                move_list.push(Move::simple_move(pos, target, PieceType::Pawn));
+                move_list.push(Move::new(
+                    pos,
+                    target,
+                    MoveFlag::DoublePawnPush,
+                    PieceType::Pawn,
+                    None,
+                    None,
+                ));
             }
         }
 

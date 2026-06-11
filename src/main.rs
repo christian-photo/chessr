@@ -4,6 +4,7 @@ use chessr::board::Board;
 use chessr::moves::MoveList;
 use chessr::moves::generator::Move;
 use chessr::piece::Piece;
+use chessr::pregen::{generate_bishop_attack_mask, generate_rook_attack_mask};
 
 macro_rules! show_size {
     (header) => {
@@ -20,6 +21,8 @@ macro_rules! show_size {
 }
 
 fn main() {
+    println!("{:#?}", generate_bishop_attack_mask());
+    println!("{:#?}", generate_rook_attack_mask());
     show_size!(header);
     show_size!(i32);
     show_size!(u8);

@@ -1,8 +1,14 @@
-use crate::moves::{
-    generator::{Move, MoveFlag},
-    sliding::SlidingAttackLookup,
-};
+use std::arch::x86_64::_SIDD_MASKED_NEGATIVE_POLARITY;
+
 pub use crate::piece::{Piece, PieceType};
+use crate::{
+    bit_ops::pop_lsb,
+    moves::{
+        generator::{Move, MoveFlag},
+        sliding::SlidingAttackLookup,
+    },
+    pregen::{BLACK_PAWN_ATTACK, KING_MOVE_MAP, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct CastlingRights {
@@ -281,72 +287,128 @@ impl Board {
     }
 
     /// Moves a piece to a specified square. Does not check if the move is legal!
-    /// It does check beforehand if there is a piece present
     pub fn make_move(&mut self, move_description: &Move) {
-        if let Some(piece) = self.piece_at(move_description.start_square) {
-            if move_description.get_flag() == MoveFlag::CastleKingside
-                || move_description.get_flag() == MoveFlag::CastleQueenside
-            {
-                if move_description.get_flag() == MoveFlag::CastleKingside {
-                    self.castling_rights.lose(true, self.white_turn);
+        match move_description.get_flag() {
+            MoveFlag::CastleKingside => {
+                self.castling_rights.lose_king_side(self.white_turn);
+                self.castling_rights.lose_queen_side(self.white_turn);
 
-                    self.remove_piece(move_description.start_square);
-                    self.remove_piece(move_description.start_square + 3);
-                    self.add_piece(piece, move_description.target_square);
-                    self.add_piece(
-                        Piece::new(PieceType::Rook, self.white_turn),
-                        move_description.start_square + 1,
-                    );
-                } else {
-                    self.castling_rights.lose(false, self.white_turn);
+                self.remove_piece(move_description.start_square);
+                self.remove_piece(move_description.start_square + 3);
+                self.add_piece(
+                    Piece::new(PieceType::King, self.white_turn),
+                    move_description.target_square,
+                );
+                self.add_piece(
+                    Piece::new(PieceType::Rook, self.white_turn),
+                    move_description.start_square + 1,
+                );
 
-                    self.remove_piece(move_description.start_square);
-                    self.remove_piece(move_description.start_square - 4);
-                    self.add_piece(piece, move_description.target_square);
-                    self.add_piece(
-                        Piece::new(PieceType::Rook, self.white_turn),
-                        move_description.start_square - 1,
-                    );
-                }
-
+                self.en_passant = None;
                 self.white_turn = !self.white_turn;
                 return;
             }
-            if self
-                .en_passant
-                .is_some_and(|sq| sq == move_description.target_square)
-            {
-                self.remove_piece(
-                    move_description.target_square - 8 * (self.white_turn as u8 * 2 - 1),
-                );
-            } else {
-                self.remove_piece(move_description.target_square);
-            }
+            MoveFlag::CastleQueenside => {
+                self.castling_rights.lose_king_side(self.white_turn);
+                self.castling_rights.lose_queen_side(self.white_turn);
 
-            self.remove_piece(move_description.start_square);
-
-            if let Some(new_piece) = move_description.promotion {
+                self.remove_piece(move_description.start_square);
+                self.remove_piece(move_description.start_square - 4);
                 self.add_piece(
-                    Piece::new(new_piece, self.white_turn),
+                    Piece::new(PieceType::King, self.white_turn),
                     move_description.target_square,
                 );
-            } else {
-                self.add_piece(piece, move_description.target_square);
-            }
+                self.add_piece(
+                    Piece::new(PieceType::Rook, self.white_turn),
+                    move_description.start_square - 1,
+                );
 
-            // White kingside rook moved or captured
-            if move_description.start_square == 0 || move_description.target_square == 0 {
-                self.castling_rights.lose_king_side(true);
-            } else if move_description.start_square == 56 || move_description.target_square == 56 {
-                self.castling_rights.lose_king_side(false);
-            } else if move_description.start_square == 7 || move_description.target_square == 7 {
-                self.castling_rights.lose_queen_side(true);
-            } else if move_description.start_square == 63 || move_description.target_square == 63 {
-                self.castling_rights.lose_queen_side(false);
+                self.en_passant = None;
+                self.white_turn = !self.white_turn;
+                return;
             }
+            MoveFlag::EnPassant => {
+                self.remove_piece(if self.white_turn {
+                    move_description.target_square - 8
+                } else {
+                    move_description.target_square + 8
+                });
+                self.remove_piece(move_description.start_square);
+                self.add_piece(
+                    Piece::new(PieceType::Pawn, self.white_turn),
+                    move_description.target_square,
+                );
 
-            self.white_turn = !self.white_turn;
+                self.en_passant = None;
+                self.white_turn = !self.white_turn;
+                return;
+            }
+            MoveFlag::Promotion => {
+                self.remove_piece(move_description.target_square);
+                self.remove_piece(move_description.start_square);
+
+                self.add_piece(
+                    Piece::new(
+                        move_description
+                            .promotion
+                            .expect("MoveFlag::Promotion was set"),
+                        self.white_turn,
+                    ),
+                    move_description.target_square,
+                );
+            }
+            MoveFlag::DoublePawnPush => {
+                self.remove_piece(move_description.target_square);
+                self.remove_piece(move_description.start_square);
+
+                self.add_piece(
+                    Piece::new(move_description.get_piece(), self.white_turn),
+                    move_description.target_square,
+                );
+
+                self.en_passant =
+                    Some((move_description.start_square + move_description.target_square) / 2);
+                self.white_turn = !self.white_turn;
+                return;
+            }
+            MoveFlag::None => {
+                self.remove_piece(move_description.target_square);
+                self.remove_piece(move_description.start_square);
+
+                self.add_piece(
+                    Piece::new(move_description.get_piece(), self.white_turn),
+                    move_description.target_square,
+                );
+            }
         }
+
+        match move_description.get_piece() {
+            PieceType::King => {
+                self.castling_rights.lose_king_side(self.white_turn);
+                self.castling_rights.lose_queen_side(self.white_turn);
+            }
+            PieceType::Rook => {
+                match move_description.start_square {
+                    0 => self.castling_rights.lose_queen_side(true),
+                    7 => self.castling_rights.lose_king_side(true),
+                    56 => self.castling_rights.lose_queen_side(false),
+                    63 => self.castling_rights.lose_king_side(false),
+                    _ => (),
+                }
+                // Also handle rook captures
+                match move_description.target_square {
+                    0 => self.castling_rights.lose_queen_side(true),
+                    7 => self.castling_rights.lose_king_side(true),
+                    56 => self.castling_rights.lose_queen_side(false),
+                    63 => self.castling_rights.lose_king_side(false),
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+
+        self.en_passant = None;
+        self.white_turn = !self.white_turn;
     }
 
     pub fn restore(&mut self, board: Board) {
@@ -357,74 +419,107 @@ impl Board {
         self.white_turn = board.white_turn;
     }
 
-    // pub fn undo_move(&mut self, move_description: &Move) {
-    //     if let Some(piece) = self.piece_at(move_description.target_square) {
-    //         if let Some(castle) = move_description.flag
-    //             && (castle == MoveFlag::CastleKingside || castle == MoveFlag::CastleQueenside)
-    //         {
-    //             // Restore rights
-    //             self.castling_rights.uncastle(!self.white_turn);
-
-    //             if castle == MoveFlag::CastleKingside {
-    //                 self.castling_rights.gain(true, !self.white_turn);
-
-    //                 self.remove_piece(move_description.start_square + 1); // Rook
-    //                 self.remove_piece(move_description.target_square); // King
-    //                 self.add_piece(piece, move_description.start_square);
-    //                 self.add_piece(
-    //                     Piece::new(PieceType::Rook, !self.white_turn),
-    //                     move_description.start_square + 3,
-    //                 );
-    //             } else {
-    //                 self.castling_rights.gain(false, !self.white_turn);
-
-    //                 self.remove_piece(move_description.start_square - 1); // Rook
-    //                 self.remove_piece(move_description.target_square); // King
-    //                 self.add_piece(piece, move_description.start_square);
-    //                 self.add_piece(
-    //                     Piece::new(PieceType::Rook, !self.white_turn),
-    //                     move_description.start_square - 4,
-    //                 );
-    //             }
-
-    //             self.white_turn = !self.white_turn;
-    //             return;
-    //         }
-    //         self.remove_piece(move_description.target_square);
-
-    //         if move_description.promotion.is_some() {
-    //             self.add_piece(
-    //                 Piece::new(PieceType::Pawn, !self.white_turn),
-    //                 move_description.start_square,
-    //             );
-    //         } else {
-    //             self.add_piece(piece, move_description.start_square);
-    //         }
-
-    //         if let Some(capture) = move_description.capture {
-    //             self.add_piece(
-    //                 Piece::new(capture, self.white_turn),
-    //                 move_description.target_square
-    //                     - (move_description.flag.map_or(0, |_| 1u8)
-    //                         * 8
-    //                         * (self.white_turn as u8 * 2 - 1)),
-    //             );
-    //         }
-
-    //         self.white_turn = !self.white_turn;
-    //     }
-    // }
-
     pub fn is_white_turn(&self) -> bool {
         self.white_turn
     }
 
-    pub fn is_game_over(&self) -> bool {
-        // self.legal_moves().len() == 0
-        false
-    }
-
     pub fn piece_at(&self, pos: u8) -> Option<Piece> {
         self.pieces[pos as usize]
+    }
+
+    /// Returns true if the opponents attacks any one of the squares in the bitboard
+    pub fn is_attacked(
+        &self,
+        squares: u64,
+        attacker_white: bool,
+        lookup: &SlidingAttackLookup,
+    ) -> bool {
+        let offset = if attacker_white { 0usize } else { 6 };
+
+        // Queens
+        let mut queens = self.bitboards[4 + offset].get_u64();
+        while queens != 0 {
+            let pos = pop_lsb(&mut queens);
+
+            if lookup.get_queen_attacks(
+                pos,
+                self.bitboards[12].get_u64() | self.bitboards[13].get_u64(),
+            ) & squares
+                != 0
+            {
+                return true;
+            }
+        }
+
+        // Rooks
+        let mut rooks = self.bitboards[3 + offset].get_u64();
+        while rooks != 0 {
+            let pos = pop_lsb(&mut rooks);
+
+            if lookup.get_rook_attacks(
+                pos,
+                self.bitboards[12].get_u64() | self.bitboards[13].get_u64(),
+            ) & squares
+                != 0
+            {
+                return true;
+            }
+        }
+
+        // Bishops
+        let mut bishops = self.bitboards[2 + offset].get_u64();
+        while bishops != 0 {
+            let pos = pop_lsb(&mut bishops);
+
+            if lookup.get_bishop_attacks(
+                pos,
+                self.bitboards[12].get_u64() | self.bitboards[13].get_u64(),
+            ) & squares
+                != 0
+            {
+                return true;
+            }
+        }
+
+        if attacker_white {
+            // It is easier to handle pawns completely seperate, because they have different attack maps for black and white
+            let mut pawns = self.bitboards[offset].get_u64();
+            while pawns != 0 {
+                let pos = pop_lsb(&mut pawns);
+
+                if WHITE_PAWN_ATTACK[pos as usize] & squares != 0 {
+                    return true;
+                }
+            }
+        } else {
+            let mut pawns = self.bitboards[offset].get_u64();
+            while pawns != 0 {
+                let pos = pop_lsb(&mut pawns);
+
+                if BLACK_PAWN_ATTACK[pos as usize] & squares != 0 {
+                    return true;
+                }
+            }
+        }
+
+        // Knights
+        let mut knights = self.bitboards[1 + offset].get_u64();
+        while knights != 0 {
+            let pos = pop_lsb(&mut knights);
+
+            if KNIGHT_ATTACK[pos as usize] & squares != 0 {
+                return true;
+            }
+        }
+
+        // King
+        let mut king = self.bitboards[5 + offset].get_u64();
+        let pos = pop_lsb(&mut king);
+
+        if KING_MOVE_MAP[pos as usize] & squares != 0 {
+            return true;
+        }
+
+        false
     }
 }

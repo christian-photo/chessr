@@ -69,8 +69,8 @@ fn move_making_benchmark(c: &mut Criterion) {
     let promotion = Move::promotion(51, 59, PieceType::Queen, None);
 
     c.bench_function("Do/Undo move", |b| {
+        let previous = board.clone();
         b.iter(|| {
-            let previous = board.clone();
             board.make_move(&promotion);
 
             board.restore(previous);
@@ -91,7 +91,7 @@ fn engine_startup_benchmark(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    move_generation_benchmark,
+    // move_generation_benchmark,
     move_making_benchmark,
     engine_startup_benchmark
 );
