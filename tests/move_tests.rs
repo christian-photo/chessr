@@ -1,6 +1,10 @@
 use chessr::{
     board::Board,
-    moves::{Move, MoveList, generator::MoveFlag, sliding::precompute_attacks},
+    moves::{
+        Move, MoveList,
+        generator::MoveFlag,
+        sliding::{SlidingAttackLookup, precompute_attacks},
+    },
     piece::{Piece, PieceType},
 };
 
@@ -223,4 +227,51 @@ fn en_passant_pinned() {
     );
 
     assert!(!en_passant.legal(&illegal, &lookup));
+}
+
+#[test]
+fn illegal_capture() {
+    let lookup = precompute_attacks();
+    let mut board = Board::from_fen("8/8/8/5p2/8/8/5QBq/1K1R2bk b - - 0 1").expect("Fen is valid");
+
+    let king_capture_bishop = Move::new(
+        7,
+        14,
+        MoveFlag::None,
+        PieceType::King,
+        Some(PieceType::Bishop),
+        None,
+    );
+
+    assert!(!king_capture_bishop.legal(&board, &lookup));
+}
+
+#[test]
+fn legal_move_generation() {
+    fn count_legal_moves(depth: u8, board: &Board, lookup: &SlidingAttackLookup) -> u32 {
+        if depth == 0 {
+            return 1;
+        }
+        let mut counter = 0u32;
+
+        let moves = Move::generate_moves(board, lookup);
+        for m in moves.iter() {
+            if m.legal(board, lookup) {
+                let mut new_board = board.clone();
+                new_board.make_move(m);
+
+                counter += count_legal_moves(depth - 1, &new_board, lookup);
+            }
+        }
+
+        return counter;
+    }
+    let lookup = precompute_attacks();
+    let board = Board::from_fen("8/1B6/8/5p2/8/8/5Qrq/1K1R2bk w - - 0 1").expect("Fen is valid");
+
+    assert_eq!(count_legal_moves(1, &board, &lookup), 43);
+    assert_eq!(count_legal_moves(2, &board, &lookup), 517);
+    assert_eq!(count_legal_moves(3, &board, &lookup), 19513);
+    assert_eq!(count_legal_moves(4, &board, &lookup), 381753);
+    assert_eq!(count_legal_moves(5, &board, &lookup), 12839499);
 }

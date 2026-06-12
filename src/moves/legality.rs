@@ -16,13 +16,21 @@ impl Move {
             return !board.is_attacked(mask, !board.is_white_turn(), lookup);
         }
 
+        // The king may not move to an attacked square
         if self.get_piece() == PieceType::King {
-            return !board.is_attacked(0b1 << self.target_square, !board.is_white_turn(), lookup);
+            let mut new_board = board.clone();
+            new_board.make_move(&self);
+
+            return !new_board.is_attacked(
+                0b1 << self.target_square,
+                !board.is_white_turn(),
+                lookup,
+            );
         }
 
         let king_bitboard = board.bitboards[5 + side * 6 as usize].get_u64();
 
-        // Is the king in check?
+        // Is the king in check? If so, then the move is only legal if the king is not in check after the move has been played
         if board.is_attacked(king_bitboard, !board.is_white_turn(), lookup) {
             let mut new_board = board.clone();
             new_board.make_move(&self);

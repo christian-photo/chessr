@@ -287,10 +287,10 @@ impl Move {
             captureable_squares = black_pieces;
             attack_map = &WHITE_PAWN_ATTACK;
 
-            let mut single_advance = (pieces | (pawns << 8)) & !pieces;
-            let mut promotions = single_advance & (0b11111111 << 56);
+            let mut single_advance = (pawns << 8) & !pieces;
+            let mut promotions = single_advance & (0xFF << 56);
             single_advance = single_advance & !promotions;
-            let mut double_advance = (pieces | ((single_advance & (0b11111111 << 16)) << 8)) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
+            let mut double_advance = ((single_advance & (0xFF << 16)) << 8) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
                 & !pieces; // Double advance is only possible on the first move, so we mask the third rank
 
             while single_advance != 0 {
@@ -325,10 +325,10 @@ impl Move {
             attack_map = &BLACK_PAWN_ATTACK;
 
             // TODO: Verify
-            let mut single_advance = (pieces | (pawns >> 8)) & !pieces;
-            let mut promotions = single_advance & 0b11111111;
+            let mut single_advance = (pawns >> 8) & !pieces;
+            let mut promotions = single_advance & 0xFF;
             single_advance = single_advance & !promotions;
-            let mut double_advance = (pieces | ((single_advance & (0b11111111 << 24) ) >> 8)) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
+            let mut double_advance = ((single_advance & (0xFF << 32)) >> 8) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
                 & !pieces; // Double advance is only possible on the first move, so we mask the sixth rank
 
             while single_advance != 0 {

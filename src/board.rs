@@ -1,5 +1,3 @@
-use std::arch::x86_64::_SIDD_MASKED_NEGATIVE_POLARITY;
-
 pub use crate::piece::{Piece, PieceType};
 use crate::{
     bit_ops::pop_lsb,
