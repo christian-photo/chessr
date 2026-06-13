@@ -232,7 +232,7 @@ fn en_passant_pinned() {
 #[test]
 fn illegal_capture() {
     let lookup = precompute_attacks();
-    let mut board = Board::from_fen("8/8/8/5p2/8/8/5QBq/1K1R2bk b - - 0 1").expect("Fen is valid");
+    let board = Board::from_fen("8/8/8/5p2/8/8/5QBq/1K1R2bk b - - 0 1").expect("Fen is valid");
 
     let king_capture_bishop = Move::new(
         7,

@@ -151,6 +151,10 @@ impl Board {
         }
     }
 
+    pub fn startpos() -> Board {
+        Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap()
+    }
+
     pub fn from_fen(fen: &str) -> Result<Board, String> {
         let mut board = Board::empty();
 
