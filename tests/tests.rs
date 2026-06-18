@@ -1,5 +1,5 @@
 use chessr::{
-    board::{Bitboard, Board},
+    board::{Bitboard, BoardState},
     moves::sliding::{
         TOTAL_BISHOP_ATTACKS, TOTAL_ROOK_ATTACKS, bishop_array_length, rook_array_length,
     },
@@ -38,7 +38,7 @@ fn piece_initialization() {
 #[test]
 fn fen_reader() {
     let starting_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    let starting_board = Board::from_fen(starting_fen).expect("FEN loading failed");
+    let starting_board = BoardState::from_fen(starting_fen).expect("FEN loading failed");
     assert!(starting_board.is_white_turn());
     assert!(starting_board.castling_rights.king_side(true));
     assert!(starting_board.castling_rights.king_side(false));
@@ -58,7 +58,7 @@ fn fen_reader() {
     println!("{}", starting_board.to_ascii());
 
     let midgame_fen = "r1bk3r/p2pBpNp/n4n2/1p1NP2P/6P1/3P4/P1P1K3/q5b1 b - - 0 1";
-    let midgame_board = Board::from_fen(midgame_fen).expect("FEN loading failed");
+    let midgame_board = BoardState::from_fen(midgame_fen).expect("FEN loading failed");
 
     assert!(!midgame_board.is_white_turn());
     let bishop_mid = midgame_board

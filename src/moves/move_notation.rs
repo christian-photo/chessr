@@ -1,5 +1,7 @@
+use vampirc_uci::UciMove;
+
 use crate::{
-    board::{Board, Piece, PieceType},
+    board::{BoardState, Piece, PieceType},
     moves::{Move, MoveList, generator::MoveFlag, sliding::SlidingAttackLookup},
 };
 
@@ -8,7 +10,7 @@ impl Move {
     /// Because it is (compared to the move generation itself) rarely used
     pub fn to_algebraic(
         &self,
-        board: &Board,
+        board: &BoardState,
         piece: &Piece,
         lookup: &SlidingAttackLookup,
     ) -> String {
@@ -27,7 +29,7 @@ impl Move {
         fn disambiguation(
             start: u8,
             target: u8,
-            board: &Board,
+            board: &BoardState,
             piece: &Piece,
             lookup: &SlidingAttackLookup,
         ) -> String {
@@ -158,16 +160,13 @@ impl Move {
         )
     }
 
-    pub fn from_uci_move(notation: &str, board: &Board) -> Result<Move, String> {
-        let start = notation.chars().take(2).collect::<String>();
-        let target = notation.chars().skip(2).take(2).collect::<String>();
-
-        let start_pos = Board::algebraic_to_u8(&start);
-        let target_pos = Board::algebraic_to_u8(&target);
+    pub fn from_uci_move(uci: &UciMove, board: &BoardState) -> Result<Move, String> {
+        let start_pos = BoardState::algebraic_to_u8(&uci.from.to_string());
+        let target_pos = BoardState::algebraic_to_u8(&uci.to.to_string());
 
         let piece = board.piece_at(start_pos).ok_or(format!(
             "Start square was {} but no piece was found on that square",
-            start
+            uci.from.to_string()
         ))?;
 
         let diff = start_pos.abs_diff(target_pos);
@@ -176,14 +175,17 @@ impl Move {
         let mut capture = None;
         let mut promotion = None;
 
-        if piece.piece_type() == PieceType::Pawn && (diff == 7 || diff == 9) {
+        if piece.piece_type() == PieceType::Pawn
+            && board.en_passant.is_some_and(|sq| sq == target_pos)
+        {
             flag = MoveFlag::EnPassant;
+            capture = Some(PieceType::Pawn)
+        } else if piece.piece_type() == PieceType::Pawn && (diff == 7 || diff == 9) {
             capture = Some(PieceType::Pawn);
         } else if piece.piece_type() == PieceType::Pawn && diff == 16 {
             flag = MoveFlag::DoublePawnPush;
-        } else if piece.piece_type() == PieceType::Pawn && (target_pos >= 56 || target_pos <= 7) {
-            promotion =
-                PieceType::from_abbreviation(notation.chars().skip(4).next().unwrap_or(' ')); // Silently fails if the conversion is not successful
+        } else if let Some(prom) = uci.promotion {
+            promotion = Some(PieceType::from_uci_piece(&prom));
             flag = MoveFlag::Promotion;
         } else if piece.piece_type() == PieceType::King && diff == 2 {
             if start_pos.saturating_sub(target_pos) == 2 {
@@ -191,6 +193,8 @@ impl Move {
             } else {
                 flag = MoveFlag::CastleKingside;
             }
+        } else if let Some(cap) = board.pieces[target_pos as usize] {
+            capture = Some(cap.piece_type());
         }
 
         Ok(Move::new(

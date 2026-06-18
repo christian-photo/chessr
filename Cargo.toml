@@ -16,3 +16,4 @@ harness = false
 
 [dependencies]
 bitintr = "0.3.0"
+vampirc-uci = "0.11"

@@ -1,11 +1,11 @@
 use crate::{
-    board::{Board, PieceType},
+    board::{BoardState, PieceType},
     moves::{Move, generator::MoveFlag, sliding::SlidingAttackLookup},
     pregen::{BISHOP_ATTACK_MASK, ROOK_ATTACK_MASK},
 };
 
 impl Move {
-    pub fn legal(&self, board: &Board, lookup: &SlidingAttackLookup) -> bool {
+    pub fn legal(&self, board: &BoardState, lookup: &SlidingAttackLookup) -> bool {
         let side = if board.is_white_turn() { 0 } else { 1 };
 
         if self.get_flag() == MoveFlag::CastleKingside {

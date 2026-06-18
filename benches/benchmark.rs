@@ -1,17 +1,54 @@
 use chessr::{
-    board::Board,
+    board::BoardState,
+    engine::ChessrEngine,
     moves::{Move, MoveList, sliding::precompute_attacks},
     piece::PieceType,
 };
 use criterion::{Criterion, criterion_group, criterion_main};
 
+fn perft_benchmark(c: &mut Criterion) {
+    let mut engine = ChessrEngine::new();
+    let state = BoardState::from_fen(
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P1P1/2N2Q1p/PPPBBP1P/R3K2R b KQkq - 0 1",
+    )
+    .unwrap();
+
+    engine.set_board(state);
+
+    c.bench_function("perft(3)", |b| b.iter(|| engine.perft(3, false)));
+}
+
+fn legality_check_benchmark(c: &mut Criterion) {
+    let lookup = precompute_attacks();
+    let state = BoardState::from_fen(
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P1P1/2N2Q1p/PPPBBP1P/R3K2R b KQkq - 0 1",
+    )
+    .unwrap();
+
+    let mut list = MoveList::new();
+    Move::generate_moves(&mut list, &state, &lookup);
+
+    c.bench_function("Legality check", |b| {
+        b.iter(|| {
+            list.iter().iter().for_each(|m| {
+                m.legal(&state, &lookup);
+            })
+        })
+    });
+}
+
 fn move_generation_benchmark(c: &mut Criterion) {
     let lookup = precompute_attacks();
-    let board = Board::from_fen("rnbqkbnr/pp2pppp/2p5/3p4/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 1")
-        .expect("Fen is valid");
+    let board =
+        BoardState::from_fen("rnbqkbnr/pp2pppp/2p5/3p4/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 1")
+            .expect("Fen is valid");
 
     c.bench_function("Move generation", |b| {
-        b.iter(|| Move::generate_moves(&board, &lookup))
+        let mut list = MoveList::new();
+        b.iter(|| {
+            Move::generate_moves(&mut list, &board, &lookup);
+            list.reset();
+        })
     });
 
     c.bench_function("Knight move generation", |b| {
@@ -64,7 +101,7 @@ fn move_generation_benchmark(c: &mut Criterion) {
 }
 
 fn move_making_benchmark(c: &mut Criterion) {
-    let mut board = Board::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1").unwrap();
+    let mut board = BoardState::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1").unwrap();
 
     let promotion = Move::promotion(51, 59, PieceType::Queen, None);
 
@@ -91,6 +128,8 @@ fn engine_startup_benchmark(c: &mut Criterion) {
 
 criterion_group!(
     benches,
+    perft_benchmark,
+    legality_check_benchmark,
     move_generation_benchmark,
     move_making_benchmark,
     engine_startup_benchmark

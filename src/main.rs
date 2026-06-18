@@ -1,12 +1,13 @@
-use std::io::stdin;
+use std::io::BufRead;
 use std::mem::size_of;
+use vampirc_uci::UciMessage;
+use vampirc_uci::parse_one;
 
-use chessr::board::Board;
+use chessr::board::BoardState;
 use chessr::engine::ChessrEngine;
 use chessr::moves::MoveList;
 use chessr::moves::generator::Move;
 use chessr::piece::Piece;
-use chessr::pregen::{generate_bishop_attack_mask, generate_rook_attack_mask};
 use chessr::uci;
 
 macro_rules! show_size {
@@ -24,13 +25,11 @@ macro_rules! show_size {
 }
 
 fn main() {
-    println!("{:#?}", generate_bishop_attack_mask());
-    println!("{:#?}", generate_rook_attack_mask());
     show_size!(header);
     show_size!(i32);
     show_size!(u8);
     show_size!(Piece);
-    show_size!(Board);
+    show_size!(BoardState);
     show_size!(Move);
     show_size!(MoveList);
     show_size!(&i32);
@@ -41,59 +40,59 @@ fn main() {
 
     let mut engine = ChessrEngine::new();
 
-    loop {
-        let mut input = String::new();
-        stdin().read_line(&mut input).expect("Could not read input");
-        let split: Vec<&str> = input.trim().split(' ').collect();
+    for line in std::io::stdin().lock().lines() {
+        let msg: UciMessage = parse_one(&line.unwrap());
 
-        match split[0] {
-            "uci" => {
+        match msg {
+            UciMessage::Uci => {
                 uci::id(&ChessrEngine::name(), &ChessrEngine::author());
                 // UciSender::options();
                 uci::acknowledge_uci();
             }
-            "setoption" => (),
-            "ucinewgame" => (),
-            "position" => match split[1] {
-                "startpos" => {
-                    let board = Board::startpos();
+            UciMessage::SetOption { name, value } => (),
+            UciMessage::UciNewGame => (),
+            UciMessage::Position {
+                startpos,
+                fen,
+                moves,
+            } => {
+                if startpos {
+                    let board = BoardState::startpos();
                     engine.set_board(board);
-                    if split.len() > 2 && split[2] == "moves" {
-                        let moves: Vec<Move> = split[3..]
-                            .iter()
-                            .map(|s| {
-                                Move::from_uci_move(s, &board)
-                                    .expect(&format!("UCI Move {} could not be parsed", s)) // This could be improved
-                            })
-                            .collect();
-
-                        engine.make_moves(&moves);
+                } else if let Some(uci_fen) = fen {
+                    match BoardState::from_fen(&uci_fen.0) {
+                        Ok(board) => engine.set_board(board),
+                        Err(e) => eprintln!("Error while parsing fen: {}", e),
                     }
                 }
-                "fen" => match Board::from_fen(&split[2..6].join(" ")) {
-                    Ok(board) => {
-                        engine.set_board(board);
-                        if split.len() > 6 && split[6] == "moves" {
-                            let moves: Vec<Move> = split[7..]
-                                .iter()
-                                .map(|s| {
-                                    Move::from_uci_move(s, &board)
-                                        .expect(&format!("UCI Move {} could not be parsed", s)) // This could be improved
-                                })
-                                .collect();
 
-                            engine.make_moves(&moves);
-                        }
-                    }
-                    Err(e) => println!("Error: {}", e),
-                },
-                _ => (),
-            },
-            "go" => engine.go(),
-            "stop" => engine.stop(),
-            "isready" => uci::engine_is_ready(),
-            "quit" => return,
+                if let Some(board) = engine.board {
+                    let m_list: Vec<Move> = moves
+                        .iter()
+                        .map(|m| {
+                            Move::from_uci_move(m, &board)
+                                .expect(&format!("UCI Move {} could not be parsed", m))
+                        })
+                        .collect();
+
+                    engine.make_moves(&m_list);
+                }
+            }
+            UciMessage::Go {
+                time_control,
+                search_control,
+            } => engine.go(time_control, search_control),
+            UciMessage::Stop => engine.stop(),
+            UciMessage::IsReady => uci::engine_is_ready(),
+            UciMessage::Quit => return,
+            UciMessage::Unknown(cmd, _) => {
+                if cmd.starts_with("go perft") {
+                    let depth = cmd[9..].parse::<u8>().unwrap();
+                    let count = engine.perft(depth, true);
+                    println!("\nNodes searched: {}", count);
+                }
+            }
             _ => (),
-        }
+        };
     }
 }

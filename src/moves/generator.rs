@@ -17,6 +17,7 @@ pub enum MoveFlag {
     DoublePawnPush,
 }
 
+#[derive(Clone, Copy)]
 pub struct MoveList {
     moves: [Move; 218],
     len: usize,
@@ -34,6 +35,14 @@ impl MoveList {
     pub fn push(&mut self, m: Move) {
         self.moves[self.len] = m;
         self.len += 1;
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn get(&self, index: usize) -> &Move {
+        &self.moves[index]
     }
 
     pub fn iter(&self) -> &[Move] {
@@ -126,20 +135,20 @@ impl Move {
 // Move generation
 impl Move {
     /// Generates pseudo legal moves
-    pub fn generate_moves(board: &Board, lookup: &SlidingAttackLookup) -> MoveList {
-        let mut moves = MoveList::new();
-
-        Move::pawn_moves(board, &mut moves);
-        Move::knight_moves(board, &mut moves);
-        Move::bishop_moves(board, &mut moves, lookup);
-        Move::rook_moves(board, &mut moves, lookup);
-        Move::queen_moves(board, &mut moves, lookup);
-        Move::king_moves(board, &mut moves);
-
-        moves
+    pub fn generate_moves(
+        move_list: &mut MoveList,
+        board: &BoardState,
+        lookup: &SlidingAttackLookup,
+    ) {
+        Move::pawn_moves(board, move_list);
+        Move::knight_moves(board, move_list);
+        Move::bishop_moves(board, move_list, lookup);
+        Move::rook_moves(board, move_list, lookup);
+        Move::queen_moves(board, move_list, lookup);
+        Move::king_moves(board, move_list);
     }
 
-    pub fn pawn_moves(board: &Board, move_list: &mut MoveList) {
+    pub fn pawn_moves(board: &BoardState, move_list: &mut MoveList) {
         let mut pawns = board.bitboards[0 + (!board.is_white_turn() as usize) * 6].get_u64();
         let white_pieces = board.bitboards[12].get_u64();
         let black_pieces = board.bitboards[13].get_u64();
@@ -193,7 +202,7 @@ impl Move {
             let mut single_advance = (pawns >> 8) & !pieces;
             let mut promotions = single_advance & 0xFF;
             single_advance = single_advance & !promotions;
-            let mut double_advance = ((single_advance & (0xFF << 32)) >> 8) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
+            let mut double_advance = ((single_advance & (0xFF << 40)) >> 8) // only the pawns that can move a single step might be able to move two, so shift these to the target squares
                 & !pieces; // Double advance is only possible on the first move, so we mask the sixth rank
 
             while single_advance != 0 {
@@ -270,7 +279,7 @@ impl Move {
         }
     }
 
-    pub fn knight_moves(board: &Board, move_list: &mut MoveList) {
+    pub fn knight_moves(board: &BoardState, move_list: &mut MoveList) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
 
         let mut knights = board.bitboards[1 + side * 6].get_u64();
@@ -295,7 +304,11 @@ impl Move {
         }
     }
 
-    pub fn bishop_moves(board: &Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
+    pub fn bishop_moves(
+        board: &BoardState,
+        move_list: &mut MoveList,
+        lookup: &SlidingAttackLookup,
+    ) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
         let mut bishops = board.bitboards[2 + side * 6].get_u64();
         let friendly = board.bitboards[12 + side].get_u64();
@@ -320,7 +333,7 @@ impl Move {
         }
     }
 
-    pub fn rook_moves(board: &Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
+    pub fn rook_moves(board: &BoardState, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
         let mut rooks = board.bitboards[3 + side * 6].get_u64();
         let friendly = board.bitboards[12 + side].get_u64();
@@ -345,7 +358,7 @@ impl Move {
         }
     }
 
-    pub fn queen_moves(board: &Board, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
+    pub fn queen_moves(board: &BoardState, move_list: &mut MoveList, lookup: &SlidingAttackLookup) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
         let mut queens = board.bitboards[4 + side * 6].get_u64();
         let friendly = board.bitboards[12 + side].get_u64();
@@ -370,7 +383,7 @@ impl Move {
         }
     }
 
-    pub fn king_moves(board: &Board, move_list: &mut MoveList) {
+    pub fn king_moves(board: &BoardState, move_list: &mut MoveList) {
         let side: usize = if board.is_white_turn() { 0 } else { 1 };
         let mut king = board.bitboards[5 + side * 6].get_u64();
         let friendly = board.bitboards[12 + side].get_u64();

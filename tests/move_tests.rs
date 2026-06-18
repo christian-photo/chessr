@@ -1,16 +1,13 @@
 use chessr::{
-    board::Board,
-    moves::{
-        Move, MoveList,
-        generator::MoveFlag,
-        sliding::{SlidingAttackLookup, precompute_attacks},
-    },
+    board::BoardState,
+    engine::ChessrEngine,
+    moves::{Move, MoveList, generator::MoveFlag, sliding::precompute_attacks},
     piece::{Piece, PieceType},
 };
 
 #[test]
 fn move_switches_player() {
-    let mut board = Board::empty();
+    let mut board = BoardState::empty();
     board.add_piece(Piece::new(PieceType::Queen, true), 8);
     let move_desc = Move::simple_move(8, 16, PieceType::Queen);
     assert!(board.is_white_turn());
@@ -20,7 +17,7 @@ fn move_switches_player() {
 
 #[test]
 fn move_moves_piece() {
-    let mut board = Board::empty();
+    let mut board = BoardState::empty();
     board.add_piece(Piece::new(PieceType::Queen, true), 0);
     board.add_piece(Piece::new(PieceType::Pawn, false), 16);
 
@@ -40,7 +37,7 @@ fn move_moves_piece() {
 
 #[test]
 fn pawn_moves() {
-    let board = Board::from_fen("rnbqkbnr/pppp1ppp/8/3Pp3/8/P1r5/3P4/RNBQKBNR w - e6 0 13")
+    let board = BoardState::from_fen("rnbqkbnr/pppp1ppp/8/3Pp3/8/P1r5/3P4/RNBQKBNR w - e6 0 13")
         .expect("FEN loading failed");
     let mut target_squares = vec![18u8, 19, 24, 27, 43, 44];
 
@@ -67,7 +64,7 @@ fn pawn_moves() {
 #[test]
 fn knight_moves() {
     let starting_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1"; // Notice the removed white pawn
-    let starting_board = Board::from_fen(starting_fen).expect("FEN loading failed");
+    let starting_board = BoardState::from_fen(starting_fen).expect("FEN loading failed");
     let mut target_squares = vec![11u8, 16, 18, 21, 23];
 
     let mut moves = MoveList::new();
@@ -87,7 +84,7 @@ fn knight_moves() {
         target_squares
     );
 
-    let board2 = Board::from_fen("2K5/8/8/2k5/8/8/3N4/8 w - - 0 13").unwrap();
+    let board2 = BoardState::from_fen("2K5/8/8/2k5/8/8/3N4/8 w - - 0 13").unwrap();
     let mut target_squares2 = vec![1u8, 5, 17, 21, 26, 28];
 
     moves.reset();
@@ -110,7 +107,7 @@ fn knight_moves() {
 
 #[test]
 fn undo_promotion() {
-    let mut board = Board::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1").unwrap();
+    let mut board = BoardState::from_fen("8/3P4/1k6/8/2K5/8/8/8 w - - 0 1").unwrap();
 
     let promotion = Move::promotion(51, 59, PieceType::Queen, None);
     let copy = board.clone();
@@ -132,7 +129,7 @@ fn undo_promotion() {
 #[test]
 fn algebraic_move_notation() {
     let lookup = precompute_attacks();
-    let board = Board::from_fen("1RK3b1/RP3P2/P7/2k5/8/6N1/3N4/8 w - - 0 13").unwrap();
+    let board = BoardState::from_fen("1RK3b1/RP3P2/P7/2k5/8/6N1/3N4/8 w - - 0 13").unwrap();
 
     let algebraic_moves = vec![
         "Nb1", "Nb3", "Nc4", "Nde4", "Nf3", "Ndf1", // Knight d-file
@@ -143,7 +140,8 @@ fn algebraic_move_notation() {
         "f8=Q", "f8=R", "f8=B", "f8=N", "fxg8=Q", "fxg8=R", "fxg8=B", "fxg8=N", // Pawn f-file
     ];
 
-    let moves = Move::generate_moves(&board, &lookup);
+    let mut moves = MoveList::new();
+    Move::generate_moves(&mut moves, &board, &lookup);
     for move_desc in moves.iter() {
         let algebraic = move_desc.to_algebraic(
             &board,
@@ -160,22 +158,24 @@ fn algebraic_move_notation() {
 #[test]
 fn castle_legality() {
     let lookup = precompute_attacks();
-    let illegal_1 =
-        Board::from_fen("rn1qkb1r/p2p1ppp/b1p2n2/4p3/Pp2P3/1B3N2/1PPP1PPP/RNBQK2R w KQkq - 0 1")
-            .unwrap(); // Castling kingside is illegal here for white, because the square next to the king is attacked by the black bishop
+    let illegal_1 = BoardState::from_fen(
+        "rn1qkb1r/p2p1ppp/b1p2n2/4p3/Pp2P3/1B3N2/1PPP1PPP/RNBQK2R w KQkq - 0 1",
+    )
+    .unwrap(); // Castling kingside is illegal here for white, because the square next to the king is attacked by the black bishop
 
     let illegal_1_castle = Move::new(4, 6, MoveFlag::CastleKingside, PieceType::King, None, None);
     assert!(!illegal_1_castle.legal(&illegal_1, &lookup));
 
-    let illegal_2 =
-        Board::from_fen("rn1qk2r/pb1p1ppp/2p2n2/2b1p3/Pp2P3/1B3N2/1PPP2PP/RNBQK2R w KQkq - 0 1")
-            .unwrap(); // Same situation as before, just the other bishop
+    let illegal_2 = BoardState::from_fen(
+        "rn1qk2r/pb1p1ppp/2p2n2/2b1p3/Pp2P3/1B3N2/1PPP2PP/RNBQK2R w KQkq - 0 1",
+    )
+    .unwrap(); // Same situation as before, just the other bishop
 
     let illegal_2_castle = Move::new(4, 6, MoveFlag::CastleKingside, PieceType::King, None, None);
     assert!(!illegal_2_castle.legal(&illegal_2, &lookup));
 
     let illegal_3 =
-        Board::from_fen("rn1qk2r/pb1p2pp/2p2n2/4p2B/Pp2P2b/5NP1/1PPP3P/RNBQK2R b KQkq - 0 1")
+        BoardState::from_fen("rn1qk2r/pb1p2pp/2p2n2/4p2B/Pp2P2b/5NP1/1PPP3P/RNBQK2R b KQkq - 0 1")
             .unwrap(); // Now it's blacks turn but the king is in check by the white bishop
 
     let illegal_3_castle = Move::new(
@@ -189,7 +189,7 @@ fn castle_legality() {
     assert!(!illegal_3_castle.legal(&illegal_3, &lookup));
 
     let legal =
-        Board::from_fen("r3k2r/pbqp3p/n1p2np1/4p2B/Pp2P2b/5NP1/1PPP3P/RNBQK2R b KQkq - 0 1")
+        BoardState::from_fen("r3k2r/pbqp3p/n1p2np1/4p2B/Pp2P2b/5NP1/1PPP3P/RNBQK2R b KQkq - 0 1")
             .unwrap();
 
     let legal1 = Move::new(
@@ -216,7 +216,7 @@ fn castle_legality() {
 #[test]
 fn en_passant_pinned() {
     let lookup = precompute_attacks();
-    let illegal = Board::from_fen("3k4/8/8/1KPp2r1/8/8/8/8 w - - 0 1").unwrap(); // This is illegal, because when white captures with en passant, the rook as a line of attack on the king
+    let illegal = BoardState::from_fen("3k4/8/8/1KPp2r1/8/8/8/8 w - - 0 1").unwrap(); // This is illegal, because when white captures with en passant, the rook as a line of attack on the king
     let en_passant = Move::new(
         34,
         43,
@@ -232,7 +232,7 @@ fn en_passant_pinned() {
 #[test]
 fn illegal_capture() {
     let lookup = precompute_attacks();
-    let board = Board::from_fen("8/8/8/5p2/8/8/5QBq/1K1R2bk b - - 0 1").expect("Fen is valid");
+    let board = BoardState::from_fen("8/8/8/5p2/8/8/5QBq/1K1R2bk b - - 0 1").expect("Fen is valid");
 
     let king_capture_bishop = Move::new(
         7,
@@ -248,30 +248,27 @@ fn illegal_capture() {
 
 #[test]
 fn legal_move_generation() {
-    fn count_legal_moves(depth: u8, board: &Board, lookup: &SlidingAttackLookup) -> u32 {
-        if depth == 0 {
-            return 1;
-        }
-        let mut counter = 0u32;
+    let mut engine = ChessrEngine::new();
+    let board =
+        BoardState::from_fen("8/1B6/8/5p2/8/8/5Qrq/1K1R2bk w - - 0 1").expect("Fen is valid");
 
-        let moves = Move::generate_moves(board, lookup);
-        for m in moves.iter() {
-            if m.legal(board, lookup) {
-                let mut new_board = board.clone();
-                new_board.make_move(m);
+    engine.set_board(board);
 
-                counter += count_legal_moves(depth - 1, &new_board, lookup);
-            }
-        }
+    assert_eq!(engine.perft(1, true), 43);
+    assert_eq!(engine.perft(2, true), 517);
+    assert_eq!(engine.perft(3, true), 19513);
+    assert_eq!(engine.perft(4, true), 381753);
+    assert_eq!(engine.perft(5, true), 12839499);
 
-        return counter;
-    }
-    let lookup = precompute_attacks();
-    let board = Board::from_fen("8/1B6/8/5p2/8/8/5Qrq/1K1R2bk w - - 0 1").expect("Fen is valid");
+    let board = BoardState::from_fen(
+        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P1P1/2N2Q1p/PPPBBP1P/R3K2R b KQkq - 0 1",
+    )
+    .expect("Valid FEN");
 
-    assert_eq!(count_legal_moves(1, &board, &lookup), 43);
-    assert_eq!(count_legal_moves(2, &board, &lookup), 517);
-    assert_eq!(count_legal_moves(3, &board, &lookup), 19513);
-    assert_eq!(count_legal_moves(4, &board, &lookup), 381753);
-    assert_eq!(count_legal_moves(5, &board, &lookup), 12839499);
+    engine.set_board(board);
+
+    assert_eq!(engine.perft(1, true), 42);
+    assert_eq!(engine.perft(2, true), 1843);
+    assert_eq!(engine.perft(3, true), 75677);
+    assert_eq!(engine.perft(4, true), 3338154);
 }

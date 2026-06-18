@@ -1,6 +1,7 @@
 pub use crate::piece::{Piece, PieceType};
 use crate::{
     bit_ops::pop_lsb,
+    engine::ZobristHash,
     moves::{
         generator::{Move, MoveFlag},
         sliding::SlidingAttackLookup,
@@ -13,10 +14,8 @@ pub struct CastlingRights {
     /// Meaning of individual bits:
     /// - 1st bit indicates white kingside
     /// - 2nd bit indicates white queenside
-    /// - 3rd bit indicates if white has castled
-    /// - 4rd bit indicates black kingside
-    /// - 5th bit indicates black queenside
-    /// - 6th bit indicates if black has castled
+    /// - 3rd bit indicates black kingside
+    /// - 4th bit indicates black queenside
     rights: u8,
 }
 
@@ -28,7 +27,7 @@ impl CastlingRights {
 
     #[inline(always)]
     pub fn queen_side(&self, white: bool) -> bool {
-        (self.rights & (0b01 << (2 * !white as u8))) != 0
+        (self.rights & (0b01 << (2 * !white as u8 + 1))) != 0
     }
 
     #[inline(always)]
@@ -38,7 +37,7 @@ impl CastlingRights {
 
     #[inline(always)]
     pub fn lose_queen_side(&mut self, white: bool) {
-        self.rights &= !(0b01 << (2 * !white as u8));
+        self.rights &= !(0b1 << (2 * !white as u8 + 1));
     }
 
     #[inline(always)]
@@ -53,7 +52,7 @@ impl CastlingRights {
 
     #[inline(always)]
     pub fn gain_queen_side(&mut self, white: bool) {
-        self.rights |= 0b01 << (2 * !white as u8);
+        self.rights |= 0b1 << (2 * !white as u8 + 1);
     }
 
     #[inline(always)]
@@ -110,7 +109,7 @@ impl Bitboard {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct Board {
+pub struct BoardState {
     /// Piece and color specific bitboards, which should be used for move generation. The last two are white and black pieces
     /// - WPawn (index 0)
     /// - WKnight
@@ -133,30 +132,35 @@ pub struct Board {
     /// Holds the castling rights for both white and black, works with a single byte internally
     pub castling_rights: CastlingRights,
 
+    pub hash: ZobristHash,
+
     /// If en passant is possible, this is Some with the square behind the pawn as its value
     pub en_passant: Option<u8>,
-    // More than likely irrelevant for our purposes
-    // half_moves: u8,
-    // full_moves: u16,
+
+    pub half_moves: u8,
+    pub full_moves: u16,
 }
 
-impl Board {
-    pub fn empty() -> Board {
-        Board {
+impl BoardState {
+    pub fn empty() -> BoardState {
+        BoardState {
             bitboards: [Bitboard::empty(); 14],
             pieces: [None; 64],
             white_turn: true,
             castling_rights: CastlingRights::none(),
             en_passant: None,
+            hash: ZobristHash::new(),
+            half_moves: 0,
+            full_moves: 0,
         }
     }
 
-    pub fn startpos() -> Board {
+    pub fn startpos() -> BoardState {
         Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap()
     }
 
-    pub fn from_fen(fen: &str) -> Result<Board, String> {
-        let mut board = Board::empty();
+    pub fn from_fen(fen: &str) -> Result<BoardState, String> {
+        let mut board = BoardState::empty();
 
         let mut iter = fen.split_ascii_whitespace();
         let placement = iter.next().expect("Malformed FEN string");
@@ -190,6 +194,10 @@ impl Board {
 
         board.white_turn = iter.next().expect("Malformed FEN string") == "w";
 
+        if !board.white_turn {
+            board.hash.change_side();
+        }
+
         let castling_rights = iter.next().expect("Malformed FEN string");
         for c in castling_rights.chars() {
             if c == '-' {
@@ -199,17 +207,27 @@ impl Board {
             let white = c.is_ascii_uppercase();
             let king_side = c.to_ascii_lowercase() == 'k';
             board.castling_rights.gain(king_side, white);
+            board.hash.castling(king_side, white);
         }
 
         let en_passant_target = iter.next().expect("Malformed FEN string");
         if en_passant_target != "-" {
-            let square = Board::algebraic_to_u8(en_passant_target);
+            let square = BoardState::algebraic_to_u8(en_passant_target);
             if square < 64 {
                 board.en_passant = Some(square);
+                board.hash.en_passant(square);
             }
         }
 
-        // Half and full moves are intentionally ignored for now
+        let half_move_string = iter.next().expect("Malformed FEN string");
+        if half_move_string != "-" {
+            board.half_moves = half_move_string.parse::<u8>().unwrap_or(0);
+        }
+
+        let full_move_string = iter.next().expect("Malformed FEN string");
+        if full_move_string != "-" {
+            board.full_moves = full_move_string.parse::<u16>().unwrap_or(0);
+        }
 
         Ok(board)
     }
@@ -271,6 +289,8 @@ impl Board {
 
         // Update color specific bitboard
         self.bitboards[12 + !piece.is_white() as usize].add_piece(pos);
+
+        self.hash.update(pos, &piece);
     }
 
     pub fn remove_piece(&mut self, pos: u8) {
@@ -280,6 +300,8 @@ impl Board {
             self.bitboards[index].remove_piece(pos);
 
             self.bitboards[12 + !piece.is_white() as usize].remove_piece(pos);
+
+            self.hash.update(pos, &piece);
         } else {
             debug_assert!(
                 self.pieces[pos as usize].is_none(),
@@ -290,6 +312,14 @@ impl Board {
 
     /// Moves a piece to a specified square. Does not check if the move is legal!
     pub fn make_move(&mut self, move_description: &Move) {
+        self.half_moves += 1;
+
+        if !self.is_white_turn() {
+            self.full_moves += 1;
+        }
+
+        self.hash.change_side();
+
         match move_description.get_flag() {
             MoveFlag::CastleKingside => {
                 self.castling_rights.lose_king_side(self.white_turn);
@@ -306,7 +336,11 @@ impl Board {
                     move_description.start_square + 1,
                 );
 
-                self.en_passant = None;
+                if let Some(esq) = self.en_passant {
+                    self.hash.en_passant(esq);
+                    self.en_passant = None;
+                }
+
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -325,7 +359,11 @@ impl Board {
                     move_description.start_square - 1,
                 );
 
-                self.en_passant = None;
+                if let Some(esq) = self.en_passant {
+                    self.hash.en_passant(esq);
+                    self.en_passant = None;
+                }
+
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -341,7 +379,11 @@ impl Board {
                     move_description.target_square,
                 );
 
-                self.en_passant = None;
+                if let Some(esq) = self.en_passant {
+                    self.hash.en_passant(esq);
+                    self.en_passant = None;
+                }
+
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -368,8 +410,14 @@ impl Board {
                     move_description.target_square,
                 );
 
+                if let Some(esq) = self.en_passant {
+                    self.hash.en_passant(esq);
+                }
+
                 self.en_passant =
                     Some((move_description.start_square + move_description.target_square) / 2);
+                self.hash.en_passant(self.en_passant.unwrap());
+
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -388,37 +436,92 @@ impl Board {
             PieceType::King => {
                 self.castling_rights.lose_king_side(self.white_turn);
                 self.castling_rights.lose_queen_side(self.white_turn);
+
+                self.hash.castling(true, self.white_turn);
+                self.hash.castling(false, self.white_turn);
             }
-            PieceType::Rook => {
-                match move_description.start_square {
-                    0 => self.castling_rights.lose_queen_side(true),
-                    7 => self.castling_rights.lose_king_side(true),
-                    56 => self.castling_rights.lose_queen_side(false),
-                    63 => self.castling_rights.lose_king_side(false),
-                    _ => (),
+            PieceType::Rook => match move_description.start_square {
+                0 => {
+                    if self.castling_rights.queen_side(true) {
+                        self.castling_rights.lose_queen_side(true);
+                        self.hash.castling(false, true);
+                    }
                 }
-                // Also handle rook captures
-                match move_description.target_square {
-                    0 => self.castling_rights.lose_queen_side(true),
-                    7 => self.castling_rights.lose_king_side(true),
-                    56 => self.castling_rights.lose_queen_side(false),
-                    63 => self.castling_rights.lose_king_side(false),
-                    _ => (),
+                7 => {
+                    if self.castling_rights.king_side(true) {
+                        self.castling_rights.lose_king_side(true);
+                        self.hash.castling(true, true);
+                    }
+                }
+                56 => {
+                    if self.castling_rights.queen_side(false) {
+                        self.castling_rights.lose_queen_side(false);
+                        self.hash.castling(false, false);
+                    }
+                }
+                63 => {
+                    if self.castling_rights.king_side(false) {
+                        self.castling_rights.lose_king_side(false);
+                        self.hash.castling(true, false);
+                    }
+                }
+                _ => (),
+            },
+            _ => (),
+        }
+
+        // Lose castling rights when a rook is captured
+        match move_description.target_square {
+            0 => {
+                if self.castling_rights.queen_side(true) {
+                    self.castling_rights.lose_queen_side(true);
+                    self.hash.castling(false, true);
+                }
+            }
+            7 => {
+                if self.castling_rights.king_side(true) {
+                    self.castling_rights.lose_king_side(true);
+                    self.hash.castling(true, true);
+                }
+            }
+            56 => {
+                if self.castling_rights.queen_side(false) {
+                    self.castling_rights.lose_queen_side(false);
+                    self.hash.castling(false, false);
+                }
+            }
+            63 => {
+                if self.castling_rights.king_side(false) {
+                    self.castling_rights.lose_king_side(false);
+                    self.hash.castling(true, false);
                 }
             }
             _ => (),
         }
 
-        self.en_passant = None;
+        if let Some(esq) = self.en_passant {
+            self.hash.en_passant(esq);
+            self.en_passant = None;
+        }
         self.white_turn = !self.white_turn;
     }
 
-    pub fn restore(&mut self, board: Board) {
+    pub fn restore(&mut self, board: BoardState) {
         self.bitboards = board.bitboards;
         self.castling_rights = board.castling_rights;
         self.en_passant = board.en_passant;
         self.pieces = board.pieces;
         self.white_turn = board.white_turn;
+    }
+
+    /// Returns true if this position occured three times -> draw
+    pub fn check_threefold_repetition(&self) -> bool {
+        false
+    }
+
+    /// Returns true if the half move limit has been exceeded -> draw
+    pub fn check_halfmoves(&self) -> bool {
+        self.half_moves >= 100
     }
 
     pub fn is_white_turn(&self) -> bool {

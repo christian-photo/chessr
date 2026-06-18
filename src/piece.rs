@@ -1,3 +1,5 @@
+use vampirc_uci::UciPiece;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 #[repr(u8)]
 pub enum PieceType {
@@ -31,6 +33,17 @@ impl PieceType {
             'q' => Some(PieceType::Queen),
             'k' => Some(PieceType::King),
             _ => None,
+        }
+    }
+
+    pub fn from_uci_piece(uci: &UciPiece) -> PieceType {
+        match uci {
+            UciPiece::Pawn => PieceType::Pawn,
+            UciPiece::Knight => PieceType::Knight,
+            UciPiece::Bishop => PieceType::Bishop,
+            UciPiece::Rook => PieceType::Rook,
+            UciPiece::Queen => PieceType::Queen,
+            UciPiece::King => PieceType::King,
         }
     }
 
