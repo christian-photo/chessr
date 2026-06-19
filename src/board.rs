@@ -534,61 +534,47 @@ impl BoardState {
 
     /// Returns true if the opponents attacks any one of the squares in the bitboard
     pub fn is_attacked(
-        &self,
         squares: u64,
+        occupancy: u64,
+        bitboards: &[Bitboard],
         attacker_white: bool,
         lookup: &SlidingAttackLookup,
     ) -> bool {
         let offset = if attacker_white { 0usize } else { 6 };
 
         // Queens
-        let mut queens = self.bitboards[4 + offset].get_u64();
+        let mut queens = bitboards[4 + offset].get_u64();
         while queens != 0 {
             let pos = pop_lsb(&mut queens);
 
-            if lookup.get_queen_attacks(
-                pos,
-                self.bitboards[12].get_u64() | self.bitboards[13].get_u64(),
-            ) & squares
-                != 0
-            {
+            if lookup.get_queen_attacks(pos, occupancy) & squares != 0 {
                 return true;
             }
         }
 
         // Rooks
-        let mut rooks = self.bitboards[3 + offset].get_u64();
+        let mut rooks = bitboards[3 + offset].get_u64();
         while rooks != 0 {
             let pos = pop_lsb(&mut rooks);
 
-            if lookup.get_rook_attacks(
-                pos,
-                self.bitboards[12].get_u64() | self.bitboards[13].get_u64(),
-            ) & squares
-                != 0
-            {
+            if lookup.get_rook_attacks(pos, occupancy) & squares != 0 {
                 return true;
             }
         }
 
         // Bishops
-        let mut bishops = self.bitboards[2 + offset].get_u64();
+        let mut bishops = bitboards[2 + offset].get_u64();
         while bishops != 0 {
             let pos = pop_lsb(&mut bishops);
 
-            if lookup.get_bishop_attacks(
-                pos,
-                self.bitboards[12].get_u64() | self.bitboards[13].get_u64(),
-            ) & squares
-                != 0
-            {
+            if lookup.get_bishop_attacks(pos, occupancy) & squares != 0 {
                 return true;
             }
         }
 
         if attacker_white {
             // It is easier to handle pawns completely seperate, because they have different attack maps for black and white
-            let mut pawns = self.bitboards[offset].get_u64();
+            let mut pawns = bitboards[offset].get_u64();
             while pawns != 0 {
                 let pos = pop_lsb(&mut pawns);
 
@@ -597,7 +583,7 @@ impl BoardState {
                 }
             }
         } else {
-            let mut pawns = self.bitboards[offset].get_u64();
+            let mut pawns = bitboards[offset].get_u64();
             while pawns != 0 {
                 let pos = pop_lsb(&mut pawns);
 
@@ -608,7 +594,7 @@ impl BoardState {
         }
 
         // Knights
-        let mut knights = self.bitboards[1 + offset].get_u64();
+        let mut knights = bitboards[1 + offset].get_u64();
         while knights != 0 {
             let pos = pop_lsb(&mut knights);
 
@@ -618,7 +604,7 @@ impl BoardState {
         }
 
         // King
-        let mut king = self.bitboards[5 + offset].get_u64();
+        let mut king = bitboards[5 + offset].get_u64();
         let pos = pop_lsb(&mut king);
 
         if KING_MOVE_MAP[pos as usize] & squares != 0 {

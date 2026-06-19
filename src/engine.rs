@@ -66,8 +66,17 @@ impl ChessrEngine {
 
             let mut moves = MoveList::new();
             Move::generate_moves(&mut moves, board, lookup);
+
+            let checked = BoardState::is_attacked(
+                board.bitboards[5 + 6 * !board.is_white_turn() as usize].get_u64(),
+                board.bitboards[12].get_u64() | board.bitboards[13].get_u64(),
+                &board.bitboards,
+                !board.is_white_turn(),
+                lookup,
+            );
+
             for m in moves.iter() {
-                if m.legal(board, lookup) {
+                if m.legal(board, lookup, checked) {
                     let mut new_board = board.clone();
                     new_board.make_move(m);
 
@@ -83,8 +92,17 @@ impl ChessrEngine {
 
             let mut moves = MoveList::new();
             Move::generate_moves(&mut moves, &board, &self.lookup);
+
+            let checked = BoardState::is_attacked(
+                board.bitboards[5 + 6 * !board.is_white_turn() as usize].get_u64(),
+                board.bitboards[12].get_u64() | board.bitboards[13].get_u64(),
+                &board.bitboards,
+                !board.is_white_turn(),
+                &self.lookup,
+            );
+
             for m in moves.iter() {
-                if m.legal(&board, &self.lookup) {
+                if m.legal(&board, &self.lookup, checked) {
                     let mut new_board = board.clone();
                     new_board.make_move(m);
 

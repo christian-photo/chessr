@@ -16,6 +16,13 @@ fn perft_benchmark(c: &mut Criterion) {
     engine.set_board(state);
 
     c.bench_function("perft(3)", |b| b.iter(|| engine.perft(3, false)));
+
+    let state =
+        BoardState::from_fen("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8").unwrap();
+
+    engine.set_board(state);
+
+    c.bench_function("perft(3) Nr 2", |b| b.iter(|| engine.perft(3, false)));
 }
 
 fn legality_check_benchmark(c: &mut Criterion) {
@@ -28,11 +35,30 @@ fn legality_check_benchmark(c: &mut Criterion) {
     let mut list = MoveList::new();
     Move::generate_moves(&mut list, &state, &lookup);
 
-    c.bench_function("Legality check", |b| {
+    c.bench_function("Is Attacked", |b| {
         b.iter(|| {
-            list.iter().iter().for_each(|m| {
-                m.legal(&state, &lookup);
-            })
+            BoardState::is_attacked(
+                0b11101101 << 32,
+                state.bitboards[12].get_u64() | state.bitboards[13].get_u64(),
+                &state.bitboards,
+                true,
+                &lookup,
+            )
+        })
+    });
+
+    c.bench_function("Legality check", |b| {
+        let checked = BoardState::is_attacked(
+            state.bitboards[11].get_u64(),
+            state.bitboards[12].get_u64() | state.bitboards[13].get_u64(),
+            &state.bitboards,
+            !state.is_white_turn(),
+            &lookup,
+        );
+        b.iter(|| {
+            list.iter().into_iter().for_each(|m| {
+                m.legal(&state, &lookup, checked);
+            });
         })
     });
 }

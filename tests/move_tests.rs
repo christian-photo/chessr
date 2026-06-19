@@ -164,7 +164,14 @@ fn castle_legality() {
     .unwrap(); // Castling kingside is illegal here for white, because the square next to the king is attacked by the black bishop
 
     let illegal_1_castle = Move::new(4, 6, MoveFlag::CastleKingside, PieceType::King, None, None);
-    assert!(!illegal_1_castle.legal(&illegal_1, &lookup));
+    let checked = BoardState::is_attacked(
+        illegal_1.bitboards[11].get_u64(),
+        illegal_1.bitboards[12].get_u64() | illegal_1.bitboards[13].get_u64(),
+        &illegal_1.bitboards,
+        !illegal_1.is_white_turn(),
+        &lookup,
+    );
+    assert!(!illegal_1_castle.legal(&illegal_1, &lookup, checked));
 
     let illegal_2 = BoardState::from_fen(
         "rn1qk2r/pb1p1ppp/2p2n2/2b1p3/Pp2P3/1B3N2/1PPP2PP/RNBQK2R w KQkq - 0 1",
@@ -172,7 +179,14 @@ fn castle_legality() {
     .unwrap(); // Same situation as before, just the other bishop
 
     let illegal_2_castle = Move::new(4, 6, MoveFlag::CastleKingside, PieceType::King, None, None);
-    assert!(!illegal_2_castle.legal(&illegal_2, &lookup));
+    let checked = BoardState::is_attacked(
+        illegal_2.bitboards[11].get_u64(),
+        illegal_2.bitboards[12].get_u64() | illegal_2.bitboards[13].get_u64(),
+        &illegal_2.bitboards,
+        !illegal_2.is_white_turn(),
+        &lookup,
+    );
+    assert!(!illegal_2_castle.legal(&illegal_2, &lookup, checked));
 
     let illegal_3 =
         BoardState::from_fen("rn1qk2r/pb1p2pp/2p2n2/4p2B/Pp2P2b/5NP1/1PPP3P/RNBQK2R b KQkq - 0 1")
@@ -186,7 +200,14 @@ fn castle_legality() {
         None,
         None,
     );
-    assert!(!illegal_3_castle.legal(&illegal_3, &lookup));
+    let checked = BoardState::is_attacked(
+        illegal_3.bitboards[11].get_u64(),
+        illegal_3.bitboards[12].get_u64() | illegal_3.bitboards[13].get_u64(),
+        &illegal_3.bitboards,
+        !illegal_3.is_white_turn(),
+        &lookup,
+    );
+    assert!(!illegal_3_castle.legal(&illegal_3, &lookup, checked));
 
     let legal =
         BoardState::from_fen("r3k2r/pbqp3p/n1p2np1/4p2B/Pp2P2b/5NP1/1PPP3P/RNBQK2R b KQkq - 0 1")
@@ -209,14 +230,22 @@ fn castle_legality() {
         None,
     );
 
-    assert!(legal1.legal(&legal, &lookup));
-    assert!(legal2.legal(&legal, &lookup));
+    let checked = BoardState::is_attacked(
+        legal.bitboards[11].get_u64(),
+        legal.bitboards[12].get_u64() | legal.bitboards[13].get_u64(),
+        &legal.bitboards,
+        !legal.is_white_turn(),
+        &lookup,
+    );
+
+    assert!(legal1.legal(&legal, &lookup, checked));
+    assert!(legal2.legal(&legal, &lookup, checked));
 }
 
 #[test]
 fn en_passant_pinned() {
     let lookup = precompute_attacks();
-    let illegal = BoardState::from_fen("3k4/8/8/1KPp2r1/8/8/8/8 w - - 0 1").unwrap(); // This is illegal, because when white captures with en passant, the rook as a line of attack on the king
+    let illegal = BoardState::from_fen("3k4/8/8/1KPp2r1/8/8/8/8 w - d6 0 1").unwrap(); // This is illegal, because when white captures with en passant, the rook as a line of attack on the king
     let en_passant = Move::new(
         34,
         43,
@@ -226,7 +255,15 @@ fn en_passant_pinned() {
         None,
     );
 
-    assert!(!en_passant.legal(&illegal, &lookup));
+    let checked = BoardState::is_attacked(
+        illegal.bitboards[11].get_u64(),
+        illegal.bitboards[12].get_u64() | illegal.bitboards[13].get_u64(),
+        &illegal.bitboards,
+        !illegal.is_white_turn(),
+        &lookup,
+    );
+
+    assert!(!en_passant.legal(&illegal, &lookup, checked));
 }
 
 #[test]
@@ -243,7 +280,15 @@ fn illegal_capture() {
         None,
     );
 
-    assert!(!king_capture_bishop.legal(&board, &lookup));
+    let checked = BoardState::is_attacked(
+        board.bitboards[11].get_u64(),
+        board.bitboards[12].get_u64() | board.bitboards[13].get_u64(),
+        &board.bitboards,
+        !board.is_white_turn(),
+        &lookup,
+    );
+
+    assert!(!king_capture_bishop.legal(&board, &lookup, checked));
 }
 
 #[test]
