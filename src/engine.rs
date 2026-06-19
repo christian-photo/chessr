@@ -1,3 +1,6 @@
+use std::time::SystemTime;
+
+use rand::seq::{IndexedRandom, IteratorRandom};
 use vampirc_uci::{UciSearchControl, UciTimeControl};
 
 use crate::{
@@ -7,6 +10,7 @@ use crate::{
         magic::Random,
         sliding::{SlidingAttackLookup, precompute_attacks},
     },
+    uci,
 };
 
 pub struct ChessrEngine {
@@ -53,6 +57,29 @@ impl ChessrEngine {
         if let Some(time) = time_control {}
 
         if let Some(search_control) = search_control {}
+
+        if let Some(board) = &mut self.board {
+            let mut moves = MoveList::new();
+            Move::generate_moves(&mut moves, &board, &self.lookup);
+
+            let king_checked = BoardState::is_attacked(
+                board.bitboards[5 + 6 * !board.is_white_turn() as usize].get_u64(),
+                board.bitboards[12].get_u64() | board.bitboards[13].get_u64(),
+                &board.bitboards,
+                !board.is_white_turn(),
+                &self.lookup,
+            );
+
+            let m = moves
+                .iter()
+                .into_iter()
+                .filter(|m| m.legal(&board, &self.lookup, king_checked))
+                .choose(&mut rand::rng())
+                .unwrap();
+
+            board.make_move(m);
+            uci::best_move(&m.to_uci_move());
+        }
     }
 
     pub fn stop(&mut self) {}

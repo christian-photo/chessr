@@ -25,19 +25,6 @@ macro_rules! show_size {
 }
 
 fn main() {
-    show_size!(header);
-    show_size!(i32);
-    show_size!(u8);
-    show_size!(Piece);
-    show_size!(BoardState);
-    show_size!(Move);
-    show_size!(MoveList);
-    show_size!(&i32);
-    show_size!(Box<i32>);
-    show_size!(&[i32]);
-    show_size!(Vec<i32>);
-    show_size!(Result<(), Box<i32>>);
-
     let mut engine = ChessrEngine::new();
 
     for line in std::io::stdin().lock().lines() {
@@ -66,16 +53,12 @@ fn main() {
                     }
                 }
 
-                if let Some(board) = engine.board {
-                    let m_list: Vec<Move> = moves
-                        .iter()
-                        .map(|m| {
-                            Move::from_uci_move(m, &board)
-                                .expect(&format!("UCI Move {} could not be parsed", m))
-                        })
-                        .collect();
-
-                    engine.make_moves(&m_list);
+                if let Some(board) = &mut engine.board {
+                    moves.iter().for_each(|m| {
+                        let move_desc = Move::from_uci_move(m, board)
+                            .expect(&format!("UCI Move {} could not be parsed", m));
+                        board.make_move(&move_desc);
+                    });
                 }
             }
             UciMessage::Go {

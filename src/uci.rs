@@ -11,7 +11,7 @@ pub fn engine_is_ready() {
     println!("readyok");
 }
 
-/// Send the best move according to the engine, in algebraic notation
+/// Send the best move according to the engine, in uci notation
 pub fn best_move(best_move: &str) {
     println!("bestmove {}", best_move);
 }

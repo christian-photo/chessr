@@ -180,11 +180,10 @@ impl Move {
         {
             flag = MoveFlag::EnPassant;
             capture = Some(PieceType::Pawn)
-        } else if piece.piece_type() == PieceType::Pawn && (diff == 7 || diff == 9) {
-            capture = Some(PieceType::Pawn);
         } else if piece.piece_type() == PieceType::Pawn && diff == 16 {
             flag = MoveFlag::DoublePawnPush;
-        } else if let Some(prom) = uci.promotion {
+        }
+        if let Some(prom) = uci.promotion {
             promotion = Some(PieceType::from_uci_piece(&prom));
             flag = MoveFlag::Promotion;
         } else if piece.piece_type() == PieceType::King && diff == 2 {
@@ -193,7 +192,8 @@ impl Move {
             } else {
                 flag = MoveFlag::CastleKingside;
             }
-        } else if let Some(cap) = board.pieces[target_pos as usize] {
+        }
+        if let Some(cap) = board.pieces[target_pos as usize] {
             capture = Some(cap.piece_type());
         }
 
