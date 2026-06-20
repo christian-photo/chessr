@@ -87,7 +87,6 @@ impl ChessrEngine {
                         best_score = score;
                         best_move = *m;
                     }
-                    eprintln!("{}: {}", m.to_uci_move(), score);
                 }
             }
 
