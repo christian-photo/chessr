@@ -10,7 +10,7 @@ use crate::{
         magic::Random,
         sliding::{SlidingAttackLookup, precompute_attacks},
     },
-    uci,
+    search, uci,
 };
 
 pub struct ChessrEngine {
@@ -54,31 +54,76 @@ impl ChessrEngine {
         time_control: Option<UciTimeControl>,
         search_control: Option<UciSearchControl>,
     ) {
-        if let Some(time) = time_control {}
-
-        if let Some(search_control) = search_control {}
-
-        if let Some(board) = &mut self.board {
-            let mut moves = MoveList::new();
-            Move::generate_moves(&mut moves, &board, &self.lookup);
+        fn run(
+            depth: u8,
+            board: &BoardState,
+            moves: &[Move],
+            lookup: &SlidingAttackLookup,
+        ) -> Move {
+            let mut best_move = Move::default();
+            let mut best_score = i32::MIN;
 
             let king_checked = BoardState::is_attacked(
                 board.bitboards[5 + 6 * !board.is_white_turn() as usize].get_u64(),
                 board.bitboards[12].get_u64() | board.bitboards[13].get_u64(),
                 &board.bitboards,
                 !board.is_white_turn(),
-                &self.lookup,
+                &lookup,
             );
 
-            let m = moves
-                .iter()
-                .into_iter()
-                .filter(|m| m.legal(&board, &self.lookup, king_checked))
-                .choose(&mut rand::rng())
-                .unwrap();
+            for m in moves.iter() {
+                if m.legal(&board, &lookup, king_checked) {
+                    let mut new_board = board.clone();
+                    new_board.make_move(m);
+                    let score = -search::search::depth_search(
+                        depth,
+                        0,
+                        i32::MIN + 1,
+                        i32::MAX - 1,
+                        &new_board,
+                        &lookup,
+                    );
+                    if score > best_score {
+                        best_score = score;
+                        best_move = *m;
+                    }
+                    eprintln!("{}: {}", m.to_uci_move(), score);
+                }
+            }
 
-            board.make_move(m);
-            uci::best_move(&m.to_uci_move());
+            return best_move;
+        }
+
+        let search_moves: Vec<Move>;
+        let mut depth: u8 = 4;
+
+        if let Some(board) = &mut self.board {
+            if let Some(time) = time_control {}
+
+            if let Some(search_control) = search_control {
+                if !search_control.search_moves.is_empty() {
+                    search_moves = search_control
+                        .search_moves
+                        .iter()
+                        .map(|m| Move::from_uci_move(m, &board).unwrap())
+                        .collect::<Vec<Move>>();
+                } else {
+                    let mut moves = MoveList::new();
+                    Move::generate_moves(&mut moves, &board, &self.lookup);
+                    search_moves = moves.iter().iter().map(|m| m.clone()).collect();
+                }
+
+                depth = search_control.depth.unwrap_or(4);
+            } else {
+                let mut moves = MoveList::new();
+                Move::generate_moves(&mut moves, &board, &self.lookup);
+                search_moves = moves.iter().iter().map(|m| m.clone()).collect();
+            }
+
+            let best_move = run(depth, board, search_moves.as_slice(), &self.lookup);
+
+            board.make_move(&best_move);
+            uci::best_move(&best_move.to_uci_move());
         }
     }
 
