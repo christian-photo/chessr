@@ -1,22 +1,24 @@
-use std::time::SystemTime;
-
-use rand::seq::{IndexedRandom, IteratorRandom};
 use vampirc_uci::{UciSearchControl, UciTimeControl};
 
 use crate::{
-    board::{BoardState, Piece},
+    board::BoardState,
+    generated::book::OpeningBook,
     moves::{
         Move, MoveList,
-        magic::Random,
         sliding::{SlidingAttackLookup, precompute_attacks},
     },
-    search, uci,
+    search::{self, ordering::order_moves},
+    uci,
 };
 
 pub struct ChessrEngine {
     pub board: Option<BoardState>,
 
     lookup: SlidingAttackLookup,
+    book: Option<OpeningBook>,
+    settings: ChessrSettings,
+
+    out_of_opening_book: bool,
 }
 
 impl ChessrEngine {
@@ -24,6 +26,9 @@ impl ChessrEngine {
         Self {
             board: None,
             lookup: precompute_attacks(),
+            book: OpeningBook::read_from_file("./openings.bin").ok(),
+            settings: ChessrSettings::default(),
+            out_of_opening_book: false,
         }
     }
 
@@ -57,7 +62,7 @@ impl ChessrEngine {
         fn run(
             depth: u8,
             board: &BoardState,
-            moves: &[Move],
+            moves: &mut [Move],
             lookup: &SlidingAttackLookup,
         ) -> Move {
             let mut best_move = Move::default();
@@ -70,6 +75,8 @@ impl ChessrEngine {
                 !board.is_white_turn(),
                 &lookup,
             );
+
+            order_moves(moves);
 
             for m in moves.iter() {
                 if m.legal(&board, &lookup, king_checked) {
@@ -93,10 +100,40 @@ impl ChessrEngine {
             return best_move;
         }
 
-        let search_moves: Vec<Move>;
+        let mut search_moves: Vec<Move>;
         let mut depth: u8 = 4;
 
         if let Some(board) = &mut self.board {
+            if let Some(book) = &self.book
+                && !self.out_of_opening_book
+                && self.settings.use_opening_book
+            {
+                let mut entries = book.find_entries(board.hash.get_u64());
+
+                if entries.len() > 0 {
+                    entries.sort_by_key(|e| e.weight);
+
+                    let best_entry = entries.last().unwrap();
+                    match Move::from_uci_move(&best_entry.to_uci(), board) {
+                        Ok(best_move) => {
+                            board.make_move(&best_move);
+                            uci::best_move(&best_move.to_uci_move());
+                            uci::acknowledge_uci();
+                            return;
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "Failed to parse book move for hash {:08x}: {}",
+                                board.hash.get_u64(),
+                                e
+                            )
+                        }
+                    }
+                } else {
+                    self.out_of_opening_book = true;
+                }
+            }
+
             if let Some(time) = time_control {}
 
             if let Some(search_control) = search_control {
@@ -119,7 +156,7 @@ impl ChessrEngine {
                 search_moves = moves.iter().iter().map(|m| m.clone()).collect();
             }
 
-            let best_move = run(depth, board, search_moves.as_slice(), &self.lookup);
+            let best_move = run(depth, board, search_moves.as_mut_slice(), &self.lookup);
 
             board.make_move(&best_move);
             uci::best_move(&best_move.to_uci_move());
@@ -127,6 +164,10 @@ impl ChessrEngine {
     }
 
     pub fn stop(&mut self) {}
+
+    pub fn reset(&mut self) {
+        self.out_of_opening_book = false;
+    }
 
     pub fn perft(&self, depth: u8, debug: bool) -> u64 {
         fn count_legal_moves(depth: u8, board: &BoardState, lookup: &SlidingAttackLookup) -> u64 {
@@ -194,98 +235,14 @@ impl ChessrEngine {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct ZobristHash {
-    hash: u64,
-
-    table: [[u64; 12]; 64],
-
-    /// Should be XORed in to the hash if it is blacks turn
-    side_to_move: u64,
-
-    /// KQkq
-    castling: [u64; 4],
-
-    /// The file of the en passant square is the index
-    en_passant: [u64; 8],
+pub struct ChessrSettings {
+    pub use_opening_book: bool,
 }
 
-impl ZobristHash {
-    pub fn new() -> Self {
-        let mut table = [[0u64; 12]; 64];
-        let mut castling = [0u64; 4];
-        let mut en_passant = [0u64; 8];
-        let mut rand = Random::new(170620260930);
-
-        for sq in 0..64 {
-            for p in 0..12 {
-                table[sq as usize][p as usize] = rand.random();
-            }
-        }
-
-        for i in 0..4 {
-            castling[i as usize] = rand.random();
-        }
-
-        for file in 0..8 {
-            en_passant[file as usize] = rand.random();
-        }
-
+impl Default for ChessrSettings {
+    fn default() -> Self {
         Self {
-            hash: 0,
-            table,
-            castling,
-            en_passant,
-            side_to_move: rand.random(),
+            use_opening_book: true,
         }
-    }
-
-    pub fn hash_board(&mut self, board: &BoardState) {
-        board.pieces.iter().enumerate().for_each(|(sq, pc)| {
-            if let Some(piece) = pc {
-                self.update(sq as u8, piece);
-            }
-        });
-
-        if board.castling_rights.king_side(true) {
-            self.hash ^= self.castling[0];
-        }
-        if board.castling_rights.queen_side(true) {
-            self.hash ^= self.castling[1];
-        }
-        if board.castling_rights.king_side(false) {
-            self.hash ^= self.castling[2];
-        }
-        if board.castling_rights.queen_side(false) {
-            self.hash ^= self.castling[3];
-        }
-
-        if let Some(sq) = board.en_passant {
-            self.hash ^= self.en_passant[sq as usize % 8];
-        }
-
-        if !board.is_white_turn() {
-            self.hash ^= self.side_to_move;
-        }
-    }
-
-    #[inline(always)]
-    pub fn update(&mut self, square: u8, piece: &Piece) {
-        self.hash ^= self.table[square as usize][piece.to_bitboard_index()];
-    }
-
-    #[inline(always)]
-    pub fn en_passant(&mut self, square: u8) {
-        self.hash ^= self.en_passant[square as usize % 8];
-    }
-
-    #[inline(always)]
-    pub fn change_side(&mut self) {
-        self.hash ^= self.side_to_move;
-    }
-
-    #[inline(always)]
-    pub fn castling(&mut self, kingside: bool, white: bool) {
-        self.hash ^= self.castling[!kingside as usize | ((!white as usize) << 1)];
     }
 }

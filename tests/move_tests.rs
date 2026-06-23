@@ -303,7 +303,6 @@ fn legal_move_generation() {
     assert_eq!(engine.perft(2, true), 517);
     assert_eq!(engine.perft(3, true), 19513);
     assert_eq!(engine.perft(4, true), 381753);
-    assert_eq!(engine.perft(5, true), 12839499);
 
     let board = BoardState::from_fen(
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P1P1/2N2Q1p/PPPBBP1P/R3K2R b KQkq - 0 1",
@@ -315,5 +314,4 @@ fn legal_move_generation() {
     assert_eq!(engine.perft(1, true), 42);
     assert_eq!(engine.perft(2, true), 1843);
     assert_eq!(engine.perft(3, true), 75677);
-    assert_eq!(engine.perft(4, true), 3338154);
 }

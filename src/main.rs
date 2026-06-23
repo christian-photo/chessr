@@ -1,3 +1,4 @@
+use chessr::generated::book::OpeningBook;
 use std::io::BufRead;
 use std::mem::size_of;
 use vampirc_uci::UciMessage;
@@ -5,9 +6,7 @@ use vampirc_uci::parse_one;
 
 use chessr::board::BoardState;
 use chessr::engine::ChessrEngine;
-use chessr::moves::MoveList;
 use chessr::moves::generator::Move;
-use chessr::piece::Piece;
 use chessr::uci;
 
 macro_rules! show_size {
@@ -37,7 +36,7 @@ fn main() {
                 uci::acknowledge_uci();
             }
             UciMessage::SetOption { name, value } => (),
-            UciMessage::UciNewGame => (),
+            UciMessage::UciNewGame => engine.reset(),
             UciMessage::Position {
                 startpos,
                 fen,

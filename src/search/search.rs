@@ -1,7 +1,7 @@
 use crate::{
     board::BoardState,
     moves::{Move, MoveList, sliding::SlidingAttackLookup},
-    search::eval,
+    search::{eval, ordering::order_moves},
 };
 
 pub fn depth_search(
@@ -18,8 +18,10 @@ pub fn depth_search(
 
     let mut alpha = alpha;
 
-    let mut moves = MoveList::new();
-    Move::generate_moves(&mut moves, board, lookup);
+    let mut list = MoveList::new();
+    Move::generate_moves(&mut list, board, lookup);
+    let moves = list.iter();
+    order_moves(moves);
 
     let king_index = if board.is_white_turn() { 5 } else { 11 };
 
@@ -33,7 +35,7 @@ pub fn depth_search(
 
     let mut legal_move_found = false;
 
-    for m in moves.iter() {
+    for m in moves {
         if m.legal(board, lookup, checked) {
             legal_move_found = true;
             let mut new_board = board.clone();

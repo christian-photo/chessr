@@ -1,8 +1,8 @@
 use crate::{
     bit_ops::pop_lsb,
     board::*,
+    generated::{BLACK_PAWN_ATTACK, KING_MOVE_MAP, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
     moves::sliding::SlidingAttackLookup,
-    pregen::{BLACK_PAWN_ATTACK, KING_MOVE_MAP, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -45,8 +45,8 @@ impl MoveList {
         &self.moves[index]
     }
 
-    pub fn iter(&self) -> &[Move] {
-        &self.moves[..self.len]
+    pub fn iter(&mut self) -> &mut [Move] {
+        &mut self.moves[..self.len]
     }
 
     pub fn reset(&mut self) {

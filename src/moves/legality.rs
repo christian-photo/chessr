@@ -1,7 +1,7 @@
 use crate::{
     board::{BoardState, Piece, PieceType},
+    generated::{BISHOP_ATTACK_MASK, ROOK_ATTACK_MASK},
     moves::{Move, generator::MoveFlag, sliding::SlidingAttackLookup},
-    pregen::{BISHOP_ATTACK_MASK, ROOK_ATTACK_MASK},
 };
 
 impl Move {

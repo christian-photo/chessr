@@ -1,5 +1,5 @@
 // This file includes functions for pregenerating certain datastructures, like knight attack maps
-
+#![allow(dead_code)]
 use crate::board::Bitboard;
 
 #[derive(Debug)]
@@ -364,6 +364,21 @@ pub fn generate_bishop_attack_mask() -> [u64; 64] {
         map[coord.to_pos() as usize] = board.get_u64();
     }
 
+    return map;
+}
+
+pub fn generate_average_attack_deviation_bonus_map(attack_map: [u64; 64]) -> [i32; 64] {
+    let mut total_attack_squares = 0;
+    for sq in 0..64 {
+        let attack_map = attack_map[sq as usize];
+        total_attack_squares += attack_map.count_ones() as i32;
+    }
+
+    let average_attack_squares = total_attack_squares / 64;
+    let mut map = [0i32; 64];
+    for sq in 0..64 {
+        map[sq] = (attack_map[sq as usize].count_ones() as i32 - average_attack_squares) * 3;
+    }
     return map;
 }
 

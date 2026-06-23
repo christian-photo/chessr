@@ -48,7 +48,7 @@ impl PieceType {
     }
 
     /// Gets the value of the piece in centipawns (100 centipawns = 1 pawn)
-    pub fn get_value(&self) -> i16 {
+    pub fn get_value(&self) -> i32 {
         match self {
             PieceType::Pawn => 100,
             PieceType::Knight => 300,

@@ -1,12 +1,12 @@
 pub use crate::piece::{Piece, PieceType};
 use crate::{
     bit_ops::pop_lsb,
-    engine::ZobristHash,
+    generated::{BLACK_PAWN_ATTACK, KING_MOVE_MAP, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
     moves::{
         generator::{Move, MoveFlag},
         sliding::SlidingAttackLookup,
     },
-    pregen::{BLACK_PAWN_ATTACK, KING_MOVE_MAP, KNIGHT_ATTACK, WHITE_PAWN_ATTACK},
+    zobrist::ZobristHash,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -194,7 +194,7 @@ impl BoardState {
 
         board.white_turn = iter.next().expect("Malformed FEN string") == "w";
 
-        if !board.white_turn {
+        if board.white_turn {
             board.hash.change_side();
         }
 
@@ -215,7 +215,10 @@ impl BoardState {
             let square = BoardState::algebraic_to_u8(en_passant_target);
             if square < 64 {
                 board.en_passant = Some(square);
-                board.hash.en_passant(square);
+                board.hash.en_passant(
+                    square,
+                    board.bitboards[if board.is_white_turn() { 6usize } else { 0 }].get_u64(),
+                );
             }
         }
 
@@ -312,7 +315,11 @@ impl BoardState {
 
     /// Moves a piece to a specified square. Does not check if the move is legal!
     pub fn make_move(&mut self, move_description: &Move) {
-        self.half_moves += 1;
+        if move_description.get_piece() != PieceType::Pawn || move_description.capture.is_none() {
+            self.half_moves += 1;
+        } else {
+            self.half_moves = 0;
+        }
 
         if !self.is_white_turn() {
             self.full_moves += 1;
@@ -337,7 +344,10 @@ impl BoardState {
                 );
 
                 if let Some(esq) = self.en_passant {
-                    self.hash.en_passant(esq);
+                    self.hash.en_passant(
+                        esq,
+                        self.bitboards[if self.is_white_turn() { 6usize } else { 0 }].get_u64(),
+                    );
                     self.en_passant = None;
                 }
 
@@ -360,7 +370,10 @@ impl BoardState {
                 );
 
                 if let Some(esq) = self.en_passant {
-                    self.hash.en_passant(esq);
+                    self.hash.en_passant(
+                        esq,
+                        self.bitboards[if self.is_white_turn() { 6usize } else { 0 }].get_u64(),
+                    );
                     self.en_passant = None;
                 }
 
@@ -380,7 +393,10 @@ impl BoardState {
                 );
 
                 if let Some(esq) = self.en_passant {
-                    self.hash.en_passant(esq);
+                    self.hash.en_passant(
+                        esq,
+                        self.bitboards[if self.is_white_turn() { 6usize } else { 0 }].get_u64(),
+                    );
                     self.en_passant = None;
                 }
 
@@ -411,12 +427,18 @@ impl BoardState {
                 );
 
                 if let Some(esq) = self.en_passant {
-                    self.hash.en_passant(esq);
+                    self.hash.en_passant(
+                        esq,
+                        self.bitboards[if self.is_white_turn() { 6usize } else { 0 }].get_u64(),
+                    );
                 }
 
                 self.en_passant =
                     Some((move_description.start_square + move_description.target_square) / 2);
-                self.hash.en_passant(self.en_passant.unwrap());
+                self.hash.en_passant(
+                    self.en_passant.unwrap(),
+                    self.bitboards[if self.is_white_turn() { 6usize } else { 0 }].get_u64(),
+                );
 
                 self.white_turn = !self.white_turn;
                 return;
@@ -500,7 +522,10 @@ impl BoardState {
         }
 
         if let Some(esq) = self.en_passant {
-            self.hash.en_passant(esq);
+            self.hash.en_passant(
+                esq,
+                self.bitboards[if self.is_white_turn() { 6usize } else { 0 }].get_u64(),
+            );
             self.en_passant = None;
         }
         self.white_turn = !self.white_turn;

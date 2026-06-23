@@ -1,9 +1,13 @@
 use chessr::{
     board::{Bitboard, BoardState},
-    moves::sliding::{
-        TOTAL_BISHOP_ATTACKS, TOTAL_ROOK_ATTACKS, bishop_array_length, rook_array_length,
+    moves::{
+        Move,
+        sliding::{
+            TOTAL_BISHOP_ATTACKS, TOTAL_ROOK_ATTACKS, bishop_array_length, rook_array_length,
+        },
     },
     piece::{Piece, PieceType},
+    zobrist::ZobristHash,
 };
 
 #[test]
@@ -77,4 +81,18 @@ fn rook_blocker_configurations() {
 #[test]
 fn bishop_blocker_configurations() {
     assert_eq!(bishop_array_length(), TOTAL_BISHOP_ATTACKS);
+}
+
+#[test]
+fn zobrist_hash() {
+    let starting_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    let mut starting_board = BoardState::from_fen(starting_fen).expect("FEN loading failed");
+
+    let mut hash = ZobristHash::new();
+    hash.hash_board(&starting_board);
+
+    assert_eq!(starting_board.hash.get_u64(), hash.get_u64()); // Check that incremental hashing (used in the fen parser) matches full hash
+    assert_eq!(starting_board.hash.get_u64(), 0x463b96181691fc9c);
+    starting_board.make_move(&Move::simple_move(8, 16, PieceType::Pawn));
+    assert_eq!(starting_board.hash.get_u64(), 0x8da7a73e5fdd72dc);
 }

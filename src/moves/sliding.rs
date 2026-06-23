@@ -2,7 +2,7 @@
 use crate::moves::magic::Random;
 use crate::{
     bit_ops::pop_lsb,
-    pregen::{BISHOP_OCCUPANCY_MASK, ROOK_OCCUPANCY_MASK},
+    generated::{BISHOP_OCCUPANCY_MASK, ROOK_OCCUPANCY_MASK},
 };
 
 pub fn precompute_attacks() -> SlidingAttackLookup {
