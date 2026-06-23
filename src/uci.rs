@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 pub fn id(name: &str, author: &str) {
     println!("id name {}", name);
     println!("id author {}", author);

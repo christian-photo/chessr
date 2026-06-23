@@ -42,6 +42,46 @@ impl ChessrEngine {
 }
 
 impl ChessrEngine {
+    pub fn set_option(&mut self, name: String, value: Option<String>) {
+        match name.as_str() {
+            "Threads" => {
+                // if self.settings.can_set_thread_count
+                //     && let Some(value) = value
+                // {
+                //     if let Ok(thread_count) = usize::from_str_radix(value.as_str(), 10) {
+                //         rayon::ThreadPoolBuilder::new()
+                //             .num_threads(thread_count)
+                //             .build_global()
+                //             .unwrap();
+                //         self.settings.thread_count = thread_count;
+                //         self.settings.can_set_thread_count = false;
+                //     }
+                // }
+            }
+            "OwnBook" => {
+                if let Some(value) = value {
+                    if value == "true" {
+                        self.settings.use_opening_book = true;
+                    } else if value == "false" {
+                        self.settings.use_opening_book = false;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn send_options(&self) {
+        println!("option name Hash type spin default 16 min 1 max 33554432");
+        println!("option name OwnBook type check default true");
+        if self.settings.can_set_thread_count {
+            println!(
+                "option name Threads type spin default {} min 1 max 1024",
+                self.settings.thread_count
+            );
+        }
+    }
+
     pub fn set_board(&mut self, board: BoardState) {
         self.board = Some(board);
     }
@@ -65,9 +105,6 @@ impl ChessrEngine {
             moves: &mut [Move],
             lookup: &SlidingAttackLookup,
         ) -> Move {
-            let mut best_move = Move::default();
-            let mut best_score = i32::MIN;
-
             let king_checked = BoardState::is_attacked(
                 board.bitboards[5 + 6 * !board.is_white_turn() as usize].get_u64(),
                 board.bitboards[12].get_u64() | board.bitboards[13].get_u64(),
@@ -78,21 +115,27 @@ impl ChessrEngine {
 
             order_moves(moves);
 
+            let mut alpha = i32::MIN + 1;
+            let beta = i32::MAX - 1;
+            let mut best_move = Move::default();
+
             for m in moves.iter() {
                 if m.legal(&board, &lookup, king_checked) {
                     let mut new_board = board.clone();
                     new_board.make_move(m);
+
                     let score = -search::search::depth_search(
-                        depth,
+                        depth - 1,
                         0,
-                        i32::MIN + 1,
-                        i32::MAX - 1,
+                        -beta,
+                        -alpha,
                         &new_board,
                         &lookup,
                     );
-                    if score > best_score {
-                        best_score = score;
-                        best_move = *m;
+
+                    if score > alpha {
+                        alpha = score;
+                        best_move = m.clone();
                     }
                 }
             }
@@ -118,7 +161,6 @@ impl ChessrEngine {
                         Ok(best_move) => {
                             board.make_move(&best_move);
                             uci::best_move(&best_move.to_uci_move());
-                            uci::acknowledge_uci();
                             return;
                         }
                         Err(e) => {
@@ -237,12 +279,17 @@ impl ChessrEngine {
 
 pub struct ChessrSettings {
     pub use_opening_book: bool,
+    pub thread_count: usize,
+
+    pub can_set_thread_count: bool,
 }
 
 impl Default for ChessrSettings {
     fn default() -> Self {
         Self {
             use_opening_book: true,
+            can_set_thread_count: true,
+            thread_count: std::thread::available_parallelism().map_or(1, |p| p.get()),
         }
     }
 }

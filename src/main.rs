@@ -32,10 +32,10 @@ fn main() {
         match msg {
             UciMessage::Uci => {
                 uci::id(&ChessrEngine::name(), &ChessrEngine::author());
-                // UciSender::options();
+                engine.send_options();
                 uci::acknowledge_uci();
             }
-            UciMessage::SetOption { name, value } => (),
+            UciMessage::SetOption { name, value } => engine.set_option(name, value),
             UciMessage::UciNewGame => engine.reset(),
             UciMessage::Position {
                 startpos,
