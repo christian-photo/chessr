@@ -108,7 +108,7 @@ impl Bitboard {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct BoardState {
     /// Piece and color specific bitboards, which should be used for move generation. The last two are white and black pieces
     /// - WPawn (index 0)
@@ -128,6 +128,7 @@ pub struct BoardState {
     pub pieces: [Option<Piece>; 64],
 
     white_turn: bool,
+    hash_history: Vec<u64>,
 
     /// Holds the castling rights for both white and black, works with a single byte internally
     pub castling_rights: CastlingRights,
@@ -147,6 +148,7 @@ impl BoardState {
             bitboards: [Bitboard::empty(); 14],
             pieces: [None; 64],
             white_turn: true,
+            hash_history: Vec::new(),
             castling_rights: CastlingRights::none(),
             en_passant: None,
             hash: ZobristHash::new(),
@@ -351,6 +353,7 @@ impl BoardState {
                     self.en_passant = None;
                 }
 
+                self.hash_history.push(self.hash.get_u64());
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -377,6 +380,7 @@ impl BoardState {
                     self.en_passant = None;
                 }
 
+                self.hash_history.push(self.hash.get_u64());
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -400,6 +404,7 @@ impl BoardState {
                     self.en_passant = None;
                 }
 
+                self.hash_history.push(self.hash.get_u64());
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -440,6 +445,7 @@ impl BoardState {
                     self.bitboards[if self.is_white_turn() { 6usize } else { 0 }].get_u64(),
                 );
 
+                self.hash_history.push(self.hash.get_u64());
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -528,19 +534,40 @@ impl BoardState {
             );
             self.en_passant = None;
         }
+        self.hash_history.push(self.hash.get_u64());
         self.white_turn = !self.white_turn;
     }
 
-    pub fn restore(&mut self, board: BoardState) {
+    pub fn restore(&mut self, board: &BoardState) {
         self.bitboards = board.bitboards;
         self.castling_rights = board.castling_rights;
         self.en_passant = board.en_passant;
         self.pieces = board.pieces;
         self.white_turn = board.white_turn;
+        self.hash_history = board.hash_history.clone();
+        self.full_moves = board.full_moves;
+        self.half_moves = board.half_moves;
+        self.hash = board.hash;
     }
 
     /// Returns true if this position occured three times -> draw
     pub fn check_threefold_repetition(&self) -> bool {
+        let current_hash = self.hash.get_u64();
+        let mut count = 1; // The current position counts as 1
+
+        // Scan backwards from the current position down to the last irreversible move
+        let start = self.hash_history.len() - self.half_moves as usize;
+        let end = self.hash_history.len();
+
+        for i in (start..end).rev().step_by(2) {
+            if self.hash_history[i] == current_hash {
+                count += 1;
+                if count >= 3 {
+                    return true;
+                }
+            }
+        }
+
         false
     }
 

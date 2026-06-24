@@ -12,6 +12,9 @@ pub fn depth_search(
     board: &BoardState,
     lookup: &SlidingAttackLookup,
 ) -> i32 {
+    if board.check_halfmoves() || board.check_threefold_repetition() {
+        return 0; // Draw
+    }
     if depth == 0 {
         return eval::evaluate(board);
     }

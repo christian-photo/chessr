@@ -136,7 +136,7 @@ fn move_making_benchmark(c: &mut Criterion) {
         b.iter(|| {
             board.make_move(&promotion);
 
-            board.restore(previous);
+            board.restore(&previous);
         })
     });
 }

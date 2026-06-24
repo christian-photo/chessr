@@ -118,7 +118,7 @@ fn undo_promotion() {
         Piece::new(PieceType::Queen, true)
     );
 
-    board.restore(copy);
+    board.restore(&copy);
 
     assert_eq!(
         board.piece_at(51).unwrap(),
