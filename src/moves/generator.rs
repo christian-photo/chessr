@@ -54,7 +54,7 @@ impl MoveList {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Move {
     pub start_square: u8,
     pub target_square: u8,

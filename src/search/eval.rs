@@ -6,6 +6,7 @@ use crate::{
 
 /// Evaluates a given board position
 pub fn evaluate(board: &BoardState) -> i32 {
+    // White wants a high score, black a low score
     let mut eval = 0i32;
     eval += count_material(board, true) - count_material(board, false);
     eval += apply_bonus_maps(board, true) - apply_bonus_maps(board, false);
@@ -15,19 +16,11 @@ pub fn evaluate(board: &BoardState) -> i32 {
         .count_ones()
         < 6
     {
-        let white_is_attacking = eval > 0;
-
-        let mut endgame_bonus = 0;
-
-        endgame_bonus += 10 * force_king_to_corner(board, !white_is_attacking);
-
-        let distance = king_distance(board);
-        endgame_bonus += (14 - distance) * 5;
-
-        if white_is_attacking {
-            eval += endgame_bonus;
+        if eval > 0 {
+            // White is attacking (position is better for white)
+            eval += endgame_bonus(board, true);
         } else {
-            eval -= endgame_bonus;
+            eval -= endgame_bonus(board, false);
         }
     }
 
@@ -92,6 +85,17 @@ fn apply_bonus_maps(board: &BoardState, white: bool) -> i32 {
     }
 
     bonus
+}
+
+fn endgame_bonus(board: &BoardState, white_attacking: bool) -> i32 {
+    let mut endgame_bonus = 0;
+
+    endgame_bonus = endgame_bonus + 10 * force_king_to_corner(board, !white_attacking);
+
+    let distance = king_distance(board);
+    endgame_bonus = endgame_bonus + (14 - distance) * 5;
+
+    return endgame_bonus;
 }
 
 fn force_king_to_corner(board: &BoardState, white_king: bool) -> i32 {

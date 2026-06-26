@@ -317,7 +317,7 @@ impl BoardState {
 
     /// Moves a piece to a specified square. Does not check if the move is legal!
     pub fn make_move(&mut self, move_description: &Move) {
-        if move_description.get_piece() != PieceType::Pawn || move_description.capture.is_none() {
+        if move_description.get_piece() != PieceType::Pawn && move_description.capture.is_none() {
             self.half_moves += 1;
         } else {
             self.half_moves = 0;
@@ -557,7 +557,7 @@ impl BoardState {
 
         // Scan backwards from the current position down to the last irreversible move
         let start = self.hash_history.len() - self.half_moves as usize;
-        let end = self.hash_history.len();
+        let end = self.hash_history.len() - 1; // Current position already counted
 
         for i in (start..end).rev().step_by(2) {
             if self.hash_history[i] == current_hash {

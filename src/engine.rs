@@ -7,7 +7,9 @@ use crate::{
         Move, MoveList,
         sliding::{SlidingAttackLookup, precompute_attacks},
     },
-    search::{self, ordering::order_moves},
+    search::{
+        self, ordering::order_moves, search::PositionSearcher, transposition::TranspositionTable,
+    },
     uci,
 };
 
@@ -16,6 +18,8 @@ pub struct ChessrEngine {
 
     lookup: SlidingAttackLookup,
     book: Option<OpeningBook>,
+    transposition_table: TranspositionTable,
+
     settings: ChessrSettings,
 
     out_of_opening_book: bool,
@@ -27,6 +31,7 @@ impl ChessrEngine {
             board: None,
             lookup: precompute_attacks(),
             book: OpeningBook::read_from_file("./openings.bin").ok(),
+            transposition_table: TranspositionTable::new(),
             settings: ChessrSettings::default(),
             out_of_opening_book: false,
         }
@@ -58,6 +63,15 @@ impl ChessrEngine {
                 //     }
                 // }
             }
+            "IterativeDeepening" => {
+                if let Some(value) = value {
+                    if value == "true" {
+                        self.settings.iterative_deepening = true;
+                    } else if value == "false" {
+                        self.settings.iterative_deepening = false;
+                    }
+                }
+            }
             "OwnBook" => {
                 if let Some(value) = value {
                     if value == "true" {
@@ -72,8 +86,8 @@ impl ChessrEngine {
     }
 
     pub fn send_options(&self) {
-        println!("option name Hash type spin default 16 min 1 max 33554432");
         println!("option name OwnBook type check default true");
+        println!("option name IterativeDeepening type check default true");
         if self.settings.can_set_thread_count {
             println!(
                 "option name Threads type spin default {} min 1 max 1024",
@@ -99,51 +113,6 @@ impl ChessrEngine {
         time_control: Option<UciTimeControl>,
         search_control: Option<UciSearchControl>,
     ) {
-        fn run(
-            depth: u8,
-            board: &BoardState,
-            moves: &mut [Move],
-            lookup: &SlidingAttackLookup,
-        ) -> Move {
-            let king_checked = BoardState::is_attacked(
-                board.bitboards[5 + 6 * !board.is_white_turn() as usize].get_u64(),
-                board.bitboards[12].get_u64() | board.bitboards[13].get_u64(),
-                &board.bitboards,
-                !board.is_white_turn(),
-                &lookup,
-            );
-
-            order_moves(moves);
-
-            let mut alpha = i32::MIN + 1;
-            let beta = i32::MAX - 1;
-            let mut best_move = Move::default();
-
-            for m in moves.iter() {
-                if m.legal(&board, &lookup, king_checked) {
-                    let mut new_board = board.clone();
-                    new_board.make_move(m);
-
-                    let score = -search::search::depth_search(
-                        depth - 1,
-                        0,
-                        -beta,
-                        -alpha,
-                        &new_board,
-                        &lookup,
-                    );
-
-                    if score > alpha {
-                        alpha = score;
-                        best_move = m.clone();
-                    }
-                }
-            }
-
-            return best_move;
-        }
-
-        let mut search_moves: Vec<Move>;
         let mut depth: u8 = 4;
 
         if let Some(board) = &mut self.board {
@@ -179,29 +148,22 @@ impl ChessrEngine {
             if let Some(time) = time_control {}
 
             if let Some(search_control) = search_control {
-                if !search_control.search_moves.is_empty() {
-                    search_moves = search_control
-                        .search_moves
-                        .iter()
-                        .map(|m| Move::from_uci_move(m, &board).unwrap())
-                        .collect::<Vec<Move>>();
-                } else {
-                    let mut moves = MoveList::new();
-                    Move::generate_moves(&mut moves, &board, &self.lookup);
-                    search_moves = moves.iter().iter().map(|m| m.clone()).collect();
-                }
-
                 depth = search_control.depth.unwrap_or(4);
-            } else {
-                let mut moves = MoveList::new();
-                Move::generate_moves(&mut moves, &board, &self.lookup);
-                search_moves = moves.iter().iter().map(|m| m.clone()).collect();
             }
 
-            let best_move = run(depth, board, search_moves.as_mut_slice(), &self.lookup);
+            let mut searcher = PositionSearcher::new(board.clone());
 
-            board.make_move(&best_move);
-            uci::best_move(&best_move.to_uci_move());
+            let best_move = searcher.search(
+                depth,
+                self.settings.iterative_deepening,
+                &mut self.transposition_table,
+                &self.lookup,
+            );
+
+            if let Some(m) = best_move {
+                board.make_move(&m);
+                uci::best_move(&m.to_uci_move());
+            }
         }
     }
 
@@ -280,6 +242,7 @@ impl ChessrEngine {
 pub struct ChessrSettings {
     pub use_opening_book: bool,
     pub thread_count: usize,
+    pub iterative_deepening: bool,
 
     pub can_set_thread_count: bool,
 }
@@ -289,6 +252,7 @@ impl Default for ChessrSettings {
         Self {
             use_opening_book: true,
             can_set_thread_count: true,
+            iterative_deepening: true,
             thread_count: std::thread::available_parallelism().map_or(1, |p| p.get()),
         }
     }
