@@ -23,7 +23,8 @@ macro_rules! show_size {
     };
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let mut engine = ChessrEngine::new();
 
     for line in std::io::stdin().lock().lines() {

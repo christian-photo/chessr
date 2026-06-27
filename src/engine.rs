@@ -1,3 +1,5 @@
+use std::{sync::atomic::Ordering, time::Duration};
+
 use vampirc_uci::{UciSearchControl, UciTimeControl};
 
 use crate::{
@@ -7,9 +9,7 @@ use crate::{
         Move, MoveList,
         sliding::{SlidingAttackLookup, precompute_attacks},
     },
-    search::{
-        self, ordering::order_moves, search::PositionSearcher, transposition::TranspositionTable,
-    },
+    search::{search::PositionSearcher, transposition::TranspositionTable},
     uci,
 };
 
@@ -145,22 +145,39 @@ impl ChessrEngine {
                 }
             }
 
-            if let Some(time) = time_control {}
+            let mut searcher = PositionSearcher::new(board.clone());
 
             if let Some(search_control) = search_control {
                 depth = search_control.depth.unwrap_or(4);
             }
 
-            let mut searcher = PositionSearcher::new(board.clone());
+            if let Some(time) = time_control {
+                match time {
+                    UciTimeControl::MoveTime(duration) => {
+                        depth = 255;
+                        let cancel_flag = searcher.search_cancelled.clone();
+                        cancel_flag.store(false, Ordering::Relaxed);
 
-            let best_move = searcher.search(
+                        tokio::spawn(async move {
+                            tokio::time::sleep(Duration::from_millis(
+                                duration.num_milliseconds() as u64
+                            ))
+                            .await;
+                            cancel_flag.store(true, Ordering::Relaxed);
+                        });
+                    }
+                    _ => (),
+                }
+            }
+
+            searcher.search(
                 depth,
                 self.settings.iterative_deepening,
                 &mut self.transposition_table,
                 &self.lookup,
             );
 
-            if let Some(m) = best_move {
+            if let Some(m) = searcher.best_move {
                 board.make_move(&m);
                 uci::best_move(&m.to_uci_move());
             }

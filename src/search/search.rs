@@ -1,3 +1,5 @@
+use std::sync::{Arc, atomic::AtomicBool};
+
 use crate::{
     board::BoardState,
     moves::{Move, MoveList, sliding::SlidingAttackLookup},
@@ -8,14 +10,15 @@ use crate::{
     },
 };
 
+#[derive(Clone)]
 pub struct PositionSearcher {
-    best_move: Option<Move>,
-    best_score: Option<i32>,
+    pub best_move: Option<Move>,
+    pub best_score: Option<i32>,
     best_move_this_iter: Option<Move>,
     best_score_this_iter: Option<i32>,
     board: BoardState,
-    current_depth: u8,
-    search_cancelled: bool,
+    pub current_depth: u8,
+    pub search_cancelled: Arc<AtomicBool>,
 }
 
 pub const MATE_SCORE: i32 = -1_000_000;
@@ -30,7 +33,7 @@ impl PositionSearcher {
             best_score_this_iter: None,
             board,
             current_depth: 0,
-            search_cancelled: false,
+            search_cancelled: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -46,12 +49,24 @@ impl PositionSearcher {
             for search_depth in 1..=depth {
                 self.depth_search(search_depth, 0, i32::MIN + 1, i32::MAX - 1, &b, lookup, tt);
 
-                if self.search_cancelled {
+                if self
+                    .search_cancelled
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                {
                     break;
                 } else {
                     self.current_depth = search_depth;
                     self.best_move = self.best_move_this_iter;
                     self.best_score = self.best_score_this_iter;
+
+                    println!(
+                        "info depth {} cp {} pv {}",
+                        self.current_depth,
+                        self.best_score.unwrap_or(0),
+                        self.best_move
+                            .map(|m| m.to_uci_move())
+                            .unwrap_or("".to_string())
+                    );
 
                     if let Some(best_score) = self.best_score
                         && is_mate_eval(best_score)
@@ -126,7 +141,10 @@ impl PositionSearcher {
                 let score =
                     -self.depth_search(depth - 1, ply + 1, -beta, -alpha, &new_board, lookup, tt);
 
-                if self.search_cancelled {
+                if self
+                    .search_cancelled
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                {
                     return alpha;
                 }
 

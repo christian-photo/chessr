@@ -552,6 +552,9 @@ impl BoardState {
 
     /// Returns true if this position occured three times -> draw
     pub fn check_threefold_repetition(&self) -> bool {
+        if self.hash_history.len() < 5 {
+            return false;
+        }
         let current_hash = self.hash.get_u64();
         let mut count = 1; // The current position counts as 1
 
