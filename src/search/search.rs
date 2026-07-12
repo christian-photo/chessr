@@ -96,7 +96,7 @@ impl PositionSearcher {
         tt: &mut TranspositionTable,
     ) -> i32 {
         if board.check_halfmoves() || board.check_threefold_repetition() {
-            return 0; // Draw
+            return -50; // Slightly discourage drawíng
         }
 
         if let Some(transposition) = tt.lookup(board.hash.get_u64(), depth, ply, alpha, beta) {
@@ -108,7 +108,7 @@ impl PositionSearcher {
         }
 
         if depth == 0 {
-            return eval::evaluate(board);
+            return self.quiescence_search(alpha, beta, board, lookup, tt);
         }
 
         let mut alpha = alpha;
@@ -188,6 +188,69 @@ impl PositionSearcher {
             node_type,
             best_move.unwrap_or_else(|| legal_move.unwrap()),
         );
+
+        return alpha;
+    }
+
+    pub fn quiescence_search(
+        &mut self,
+        alpha: i32,
+        beta: i32,
+        board: &BoardState,
+        lookup: &SlidingAttackLookup,
+        tt: &mut TranspositionTable,
+    ) -> i32 {
+        let king_index = if board.is_white_turn() { 5 } else { 11 };
+        let checked = BoardState::is_attacked(
+            board.bitboards[king_index].get_u64(),
+            board.bitboards[12].get_u64() | board.bitboards[13].get_u64(),
+            &board.bitboards,
+            !board.is_white_turn(),
+            &lookup,
+        );
+
+        let mut alpha = alpha;
+        if !checked {
+            let eval = eval::evaluate(board);
+            if eval >= beta {
+                return beta;
+            }
+            if eval > alpha {
+                alpha = eval;
+            }
+        }
+
+        let mut list = MoveList::new();
+        if checked {
+            // Generate all moves, not just captures
+            Move::generate_moves(&mut list, board, lookup);
+        } else {
+            Move::generate_captures_only(&mut list, board, lookup);
+        }
+        let moves = list.iter();
+        order_moves(moves, &board, tt);
+
+        for m in moves {
+            if m.legal(board, lookup, checked) {
+                let mut new_board = board.clone();
+                new_board.make_move(m);
+                let score = -self.quiescence_search(-beta, -alpha, &new_board, lookup, tt);
+
+                if self
+                    .search_cancelled
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    return alpha;
+                }
+
+                if score >= beta {
+                    return score;
+                }
+                if score > alpha {
+                    alpha = score;
+                }
+            }
+        }
 
         return alpha;
     }

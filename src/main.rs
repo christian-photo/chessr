@@ -1,6 +1,4 @@
-use chessr::generated::book::OpeningBook;
 use std::io::BufRead;
-use std::mem::size_of;
 use vampirc_uci::UciMessage;
 use vampirc_uci::parse_one;
 

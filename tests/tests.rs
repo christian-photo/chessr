@@ -7,6 +7,7 @@ use chessr::{
         },
     },
     piece::{Piece, PieceType},
+    search::ordering::order_moves,
     zobrist::ZobristHash,
 };
 
@@ -95,4 +96,34 @@ fn zobrist_hash() {
     assert_eq!(starting_board.hash.get_u64(), 0x463b96181691fc9c);
     starting_board.make_move(&Move::simple_move(8, 16, PieceType::Pawn));
     assert_eq!(starting_board.hash.get_u64(), 0x8da7a73e5fdd72dc);
+}
+
+#[test]
+fn threefold_repetition() {
+    let fen = "2K5/8/2k5/8/8/8/8/4Q3 w - - 24 13";
+    let mut board = BoardState::from_fen(fen).unwrap();
+    let original_hash = board.hash.get_u64();
+
+    let w_king_right = Move::simple_move(58, 59, PieceType::King);
+    let w_king_left = Move::simple_move(59, 58, PieceType::King);
+
+    let b_king_right = Move::simple_move(42, 43, PieceType::King);
+    let b_king_left = Move::simple_move(43, 42, PieceType::King);
+
+    assert!(!board.check_threefold_repetition());
+
+    board.make_move(&w_king_right);
+    board.make_move(&b_king_right);
+    board.make_move(&w_king_left);
+    board.make_move(&b_king_left);
+
+    assert_eq!(board.hash.get_u64(), original_hash);
+    assert!(!board.check_threefold_repetition());
+
+    board.make_move(&w_king_right);
+    board.make_move(&b_king_right);
+    board.make_move(&w_king_left);
+    board.make_move(&b_king_left);
+
+    assert!(board.check_threefold_repetition());
 }

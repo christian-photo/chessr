@@ -307,16 +307,13 @@ impl BoardState {
             self.bitboards[12 + !piece.is_white() as usize].remove_piece(pos);
 
             self.hash.update(pos, &piece);
-        } else {
-            debug_assert!(
-                self.pieces[pos as usize].is_none(),
-                "square {pos} is not occupied"
-            );
         }
     }
 
     /// Moves a piece to a specified square. Does not check if the move is legal!
     pub fn make_move(&mut self, move_description: &Move) {
+        self.hash_history.push(self.hash.get_u64());
+
         if move_description.get_piece() != PieceType::Pawn && move_description.capture.is_none() {
             self.half_moves += 1;
         } else {
@@ -353,7 +350,6 @@ impl BoardState {
                     self.en_passant = None;
                 }
 
-                self.hash_history.push(self.hash.get_u64());
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -380,7 +376,6 @@ impl BoardState {
                     self.en_passant = None;
                 }
 
-                self.hash_history.push(self.hash.get_u64());
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -404,7 +399,6 @@ impl BoardState {
                     self.en_passant = None;
                 }
 
-                self.hash_history.push(self.hash.get_u64());
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -445,7 +439,6 @@ impl BoardState {
                     self.bitboards[if self.is_white_turn() { 6usize } else { 0 }].get_u64(),
                 );
 
-                self.hash_history.push(self.hash.get_u64());
                 self.white_turn = !self.white_turn;
                 return;
             }
@@ -462,11 +455,14 @@ impl BoardState {
 
         match move_description.get_piece() {
             PieceType::King => {
-                self.castling_rights.lose_king_side(self.white_turn);
-                self.castling_rights.lose_queen_side(self.white_turn);
-
-                self.hash.castling(true, self.white_turn);
-                self.hash.castling(false, self.white_turn);
+                if self.castling_rights.king_side(self.white_turn) {
+                    self.hash.castling(true, self.white_turn);
+                    self.castling_rights.lose_king_side(self.white_turn);
+                }
+                if self.castling_rights.queen_side(self.white_turn) {
+                    self.hash.castling(false, self.white_turn);
+                    self.castling_rights.lose_queen_side(self.white_turn);
+                }
             }
             PieceType::Rook => match move_description.start_square {
                 0 => {
@@ -534,7 +530,7 @@ impl BoardState {
             );
             self.en_passant = None;
         }
-        self.hash_history.push(self.hash.get_u64());
+
         self.white_turn = !self.white_turn;
     }
 
@@ -559,7 +555,10 @@ impl BoardState {
         let mut count = 1; // The current position counts as 1
 
         // Scan backwards from the current position down to the last irreversible move
-        let start = self.hash_history.len() - self.half_moves as usize;
+        let start = self
+            .hash_history
+            .len()
+            .saturating_sub(self.half_moves as usize);
         let end = self.hash_history.len() - 1; // Current position already counted
 
         for i in (start..end).rev().step_by(2) {

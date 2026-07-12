@@ -3,6 +3,7 @@ use chessr::{
     engine::ChessrEngine,
     moves::{Move, MoveList, generator::MoveFlag, sliding::precompute_attacks},
     piece::{Piece, PieceType},
+    search::{ordering::order_moves, transposition::TranspositionTable},
 };
 
 #[test]
@@ -13,6 +14,20 @@ fn move_switches_player() {
     assert!(board.is_white_turn());
     board.make_move(&move_desc);
     assert!(!board.is_white_turn());
+}
+
+#[test]
+fn move_ordering() {
+    let board = BoardState::from_fen("8/1B6/8/5p2/8/8/5Qrq/1K1R2bk w - - 0 1").unwrap();
+    let lookup = precompute_attacks();
+    let mut moves = MoveList::new();
+    Move::generate_moves(&mut moves, &board, &lookup);
+    let tt = TranspositionTable::new();
+
+    let mut m = moves.iter();
+    let old_first = m[3].clone();
+    order_moves(&mut m, &board, &tt);
+    assert_ne!(m[3], old_first);
 }
 
 #[test]

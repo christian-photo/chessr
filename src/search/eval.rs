@@ -11,11 +11,7 @@ pub fn evaluate(board: &BoardState) -> i32 {
     eval += count_material(board, true) - count_material(board, false);
     eval += apply_bonus_maps(board, true) - apply_bonus_maps(board, false);
 
-    if board.bitboards[11 + board.is_white_turn() as usize]
-        .get_u64()
-        .count_ones()
-        < 6
-    {
+    if (board.bitboards[12].get_u64() | board.bitboards[13].get_u64()).count_ones() < 14 {
         if eval > 0 {
             // White is attacking (position is better for white)
             eval += endgame_bonus(board, true);
@@ -82,6 +78,20 @@ fn apply_bonus_maps(board: &BoardState, white: bool) -> i32 {
         let pos = pop_lsb(&mut bishops);
 
         bonus += BISHOP_BONUS_MAP[pos as usize];
+    }
+
+    let mut rooks = board.bitboards[3 + offset].get_u64();
+    while rooks != 0 {
+        let pos = pop_lsb(&mut rooks);
+
+        bonus += ROOK_BONUS_MAP[pos as usize];
+    }
+
+    let mut queens = board.bitboards[4 + offset].get_u64();
+    while queens != 0 {
+        let pos = pop_lsb(&mut queens);
+
+        bonus += ROOK_BONUS_MAP[pos as usize];
     }
 
     bonus
